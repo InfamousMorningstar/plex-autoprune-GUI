@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h1 style="color: var(--centauri-cyan); margin-bottom: 2rem;">Dashboard</h1>
+
+<!-- Status Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+    <div class="card">
+        <div style="display: flex; justify-content: between; align-items: center;">
+            <div>
+                <div style="color: var(--text-secondary); font-size: 0.9rem;">Total Users</div>
+                <div id="totalUsers" style="font-size: 2.5rem; color: var(--centauri-cyan); font-weight: bold;">--</div>
+            </div>
+            <div style="font-size: 3rem; opacity: 0.2;">👥</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div style="color: var(--text-secondary); font-size: 0.9rem;">Active Users</div>
+                <div id="activeUsers" style="font-size: 2.5rem; color: var(--success); font-weight: bold;">--</div>
+            </div>
+            <div style="font-size: 3rem; opacity: 0.2;">✓</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div style="color: var(--text-secondary); font-size: 0.9rem;">Warned Users</div>
+                <div id="warnedUsers" style="font-size: 2.5rem; color: var(--warning); font-weight: bold;">--</div>
+            </div>
+            <div style="font-size: 3rem; opacity: 0.2;">⚠</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div style="color: var(--text-secondary); font-size: 0.9rem;">Removed Users</div>
+                <div id="removedUsers" style="font-size: 2.5rem; color: var(--danger); font-weight: bold;">--</div>
+            </div>
+            <div style="font-size: 3rem; opacity: 0.2;">✗</div>
+        </div>
+    </div>
+</div>
+
+<!-- System Status & Settings -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">System Status</h2>
+            <span class="status-dot online"></span>
+        </div>
+        <div style="display: grid; gap: 1rem;">
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Daemon Status:</span>
+                <span id="daemonStatus" class="badge badge-success">Running</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Operating Mode:</span>
+                <span id="operatingMode" class="badge badge-warning">DRY RUN</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Last Check:</span>
+                <span id="lastCheck" style="color: var(--text-muted);">--</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Current Thresholds</h2>
+        </div>
+        <div style="display: grid; gap: 1rem;">
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Warning After:</span>
+                <span id="warnThreshold" style="color: var(--warning);">-- days</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Removal After:</span>
+                <span id="kickThreshold" style="color: var(--danger);">-- days</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Check Interval:</span>
+                <span id="checkInterval" style="color: var(--text-muted);">-- seconds</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Recent Activity</h2>
+        <button class="btn btn-secondary" onclick="refreshLogs()">Refresh</button>
+    </div>
+    <div id="recentActivity" style="max-height: 400px; overflow-y: auto;">
+        <div class="spinner"></div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Quick Actions</h2>
+    </div>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <a href="/users" class="btn btn-primary">Manage Users</a>
+        <a href="/settings" class="btn btn-secondary">Settings</a>
+        <a href="/logs" class="btn btn-secondary">View Logs</a>
+        <button class="btn btn-secondary" onclick="toggleDryRun()">
+            <span id="dryRunToggle">Disable DRY RUN</span>
+        </button>
+    </div>
+</div>
+
+<style>
+    .activity-item {
+        padding: 0.75rem;
+        border-left: 3px solid var(--border-color);
+        margin-bottom: 0.5rem;
+        background: var(--bg-tertiary);
+        border-radius: 4px;
+    }
+
+    .activity-item.success {
+        border-left-color: var(--success);
+    }
+
+    .activity-item.warning {
+        border-left-color: var(--warning);
+    }
+
+    .activity-item.error {
+        border-left-color: var(--danger);
+    }
+
+    .activity-timestamp {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+</style>
+
+<script>
+    let socket;
+    let stats = {};
+
+    async function loadStats() {
+        try {
+            stats = await API.get('/api/stats');
+            
+            document.getElementById('totalUsers').textContent = stats.total_users;
+            document.getElementById('activeUsers').textContent = stats.active_users;
+            document.getElementById('warnedUsers').textContent = stats.warned_users;
+            document.getElementById('removedUsers').textContent = stats.removed_users;
+            
+            document.getElementById('operatingMode').textContent = stats.dry_run_mode ? 'DRY RUN' : 'LIVE';
+            document.getElementById('operatingMode').className = stats.dry_run_mode ? 'badge badge-warning' : 'badge badge-success';
+            
+            document.getElementById('warnThreshold').textContent = stats.warn_threshold + ' days';
+            document.getElementById('kickThreshold').textContent = stats.kick_threshold + ' days';
+            
+            document.getElementById('lastCheck').textContent = new Date().toLocaleTimeString();
+            
+            document.getElementById('dryRunToggle').textContent = 
+                stats.dry_run_mode ? 'Disable DRY RUN' : 'Enable DRY RUN';
+        } catch (error) {
+            console.error('Failed to load stats:', error);
+        }
+    }
+
+    async function refreshLogs() {
+        try {
+            const data = await API.get('/api/logs');
+            const container = document.getElementById('recentActivity');
+            
+            if (!data.logs || data.logs.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 2rem;">No recent activity</div>';
+                return;
+            }
+            
+            container.innerHTML = data.logs.slice(-20).reverse().map(log => {
+                const level = log.level || 'INFO';
+                const className = level === 'SUCCESS' ? 'success' : 
+                                 level === 'WARNING' ? 'warning' : 
+                                 level === 'ERROR' ? 'error' : '';
+                
+                return `
+                    <div class="activity-item ${className}">
+                        <div class="activity-timestamp">${log.timestamp}</div>
+                        <div>${log.message}</div>
+                    </div>
+                `;
+            }).join('');
+        } catch (error) {
+            console.error('Failed to load logs:', error);
+        }
+    }
+
+    async function toggleDryRun() {
+        if (!confirm(`Are you sure you want to ${stats.dry_run_mode ? 'DISABLE' : 'ENABLE'} DRY RUN mode?${!stats.dry_run_mode ? '\n\nThis will enable live operations!' : ''}`)) {
+            return;
+        }
+
+        try {
+            const config = await API.get('/api/config');
+            config.DRY_RUN = stats.dry_run_mode ? 'false' : 'true';
+            await API.post('/api/config', config);
+            
+            showAlert(`DRY RUN mode ${stats.dry_run_mode ? 'disabled' : 'enabled'}`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } catch (error) {
+            showAlert(`Failed to toggle DRY RUN: ${error.message}`, 'error');
+        }
+    }
+
+    function connectWebSocket() {
+        socket = io();
+        
+        socket.on('connect', () => {
+            console.log('WebSocket connected');
+        });
+        
+        socket.on('log', (data) => {
+            // Reload stats when new activity occurs
+            loadStats();
+            refreshLogs();
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('WebSocket disconnected');
+        });
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        loadStats();
+        refreshLogs();
+        connectWebSocket();
+        
+        // Refresh stats every 30 seconds
+        setInterval(loadStats, 30000);
+    });
+</script>
+{% endblock %}

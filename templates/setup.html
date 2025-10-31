@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Wizard{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 4rem auto;">
+    <div class="card">
+        <div class="text-center mb-2">
+            <div class="logo" style="width: 80px; height: 80px; font-size: 3rem; margin: 0 auto 1rem;"></div>
+            <h1 style="color: var(--centauri-cyan); font-size: 2rem; margin-bottom: 0.5rem;">Welcome to Plex-Auto-Prune GUI</h1>
+            <p style="color: var(--text-secondary);">Let's get your Plex user management system configured</p>
+        </div>
+    </div>
+
+    <!-- Progress Steps -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 2rem;">
+            <div class="setup-step active" data-step="1">
+                <div class="step-number">1</div>
+                <div class="step-label">Plex</div>
+            </div>
+            <div class="setup-step" data-step="2">
+                <div class="step-number">2</div>
+                <div class="step-label">Tautulli</div>
+            </div>
+            <div class="setup-step" data-step="3">
+                <div class="step-number">3</div>
+                <div class="step-label">Email</div>
+            </div>
+            <div class="setup-step" data-step="4">
+                <div class="step-number">4</div>
+                <div class="step-label">Discord</div>
+            </div>
+            <div class="setup-step" data-step="5">
+                <div class="step-number">5</div>
+                <div class="step-label">Settings</div>
+            </div>
+        </div>
+
+        <form id="setupForm">
+            <!-- Step 1: Plex Configuration -->
+            <div class="setup-content" data-step="1">
+                <h2 style="color: var(--centauri-cyan); margin-bottom: 1rem;">Plex Configuration</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Plex Token *</label>
+                    <input type="password" name="PLEX_TOKEN" class="form-input" required>
+                    <div class="form-hint">
+                        Get your token: Settings → Network → Show Advanced → X-Plex-Token
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Server Name</label>
+                    <input type="text" name="PLEX_SERVER_NAME" class="form-input" placeholder="Centauri">
+                    <div class="form-hint">Optional: Display name for your Plex server</div>
+                </div>
+
+                <button type="button" class="btn btn-primary" onclick="testPlex()">Test Connection</button>
+                <div id="plexStatus"></div>
+            </div>
+
+            <!-- Step 2: Tautulli Configuration -->
+            <div class="setup-content" data-step="2" style="display: none;">
+                <h2 style="color: var(--centauri-cyan); margin-bottom: 1rem;">Tautulli Configuration</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Tautulli URL *</label>
+                    <input type="url" name="TAUTULLI_URL" class="form-input" placeholder="http://192.168.1.100:8181" required>
+                    <div class="form-hint">Full URL to your Tautulli instance</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">API Key *</label>
+                    <input type="password" name="TAUTULLI_API_KEY" class="form-input" required>
+                    <div class="form-hint">Settings → Web Interface → API Key</div>
+                </div>
+
+                <button type="button" class="btn btn-primary" onclick="testTautulli()">Test Connection</button>
+                <div id="tautulliStatus"></div>
+            </div>
+
+            <!-- Step 3: Email Configuration -->
+            <div class="setup-content" data-step="3" style="display: none;">
+                <h2 style="color: var(--centauri-cyan); margin-bottom: 1rem;">Email Configuration</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">SMTP Server *</label>
+                    <input type="text" name="SMTP_HOST" class="form-input" value="smtp.gmail.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">SMTP Port *</label>
+                    <input type="number" name="SMTP_PORT" class="form-input" value="587" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email Address *</label>
+                    <input type="email" name="SMTP_USERNAME" class="form-input" required>
+                    <div class="form-hint">Your Gmail address</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">App Password *</label>
+                    <input type="password" name="SMTP_PASSWORD" class="form-input" required>
+                    <div class="form-hint">
+                        Gmail App Password (not your regular password)<br>
+                        Create one: Google Account → Security → 2-Step Verification → App passwords
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">From Name</label>
+                    <input type="text" name="SMTP_FROM" class="form-input" placeholder="Plex Admin <you@gmail.com>">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Admin Email *</label>
+                    <input type="email" name="ADMIN_EMAIL" class="form-input" required>
+                    <div class="form-hint">Where to send admin notifications</div>
+                </div>
+
+                <button type="button" class="btn btn-primary" onclick="testEmail()">Send Test Email</button>
+                <div id="emailStatus"></div>
+            </div>
+
+            <!-- Step 4: Discord (Optional) -->
+            <div class="setup-content" data-step="4" style="display: none;">
+                <h2 style="color: var(--centauri-cyan); margin-bottom: 1rem;">Discord Integration (Optional)</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Discord Webhook URL</label>
+                    <input type="url" name="DISCORD_WEBHOOK" class="form-input" placeholder="https://discord.com/api/webhooks/...">
+                    <div class="form-hint">
+                        Server Settings → Integrations → Webhooks → New Webhook
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Your Discord User Link</label>
+                    <input type="url" name="LINK_DISCORD" class="form-input" placeholder="https://discord.com/users/123456789">
+                    <div class="form-hint">Optional: Link to your Discord profile</div>
+                </div>
+
+                <button type="button" class="btn btn-primary" onclick="testDiscord()">Send Test Message</button>
+                <div id="discordStatus"></div>
+            </div>
+
+            <!-- Step 5: Thresholds & VIPs -->
+            <div class="setup-content" data-step="5" style="display: none;">
+                <h2 style="color: var(--centauri-cyan); margin-bottom: 1rem;">Thresholds & Protection</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Warning Threshold (days)</label>
+                    <input type="number" name="WARN_DAYS" class="form-input" value="27" min="1">
+                    <div class="form-hint">Send warning email after this many days of inactivity</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Removal Threshold (days)</label>
+                    <input type="number" name="KICK_DAYS" class="form-input" value="30" min="1">
+                    <div class="form-hint">Remove user after this many days of inactivity</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">VIP Users (Protected from removal)</label>
+                    <input type="text" name="VIP_NAMES" class="form-input" placeholder="friend1,family_member,bestfriend">
+                    <div class="form-hint">Comma-separated list of usernames to protect</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Check Intervals</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div>
+                            <label class="form-label" style="font-size: 0.8rem;">New Users (seconds)</label>
+                            <input type="number" name="CHECK_NEW_USERS_SECS" class="form-input" value="120">
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-size: 0.8rem;">Inactivity (seconds)</label>
+                            <input type="number" name="CHECK_INACTIVITY_SECS" class="form-input" value="1800">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" name="DRY_RUN" value="true" checked>
+                        <span>Start in DRY RUN mode (recommended)</span>
+                    </label>
+                    <div class="form-hint">Dry run mode logs actions without actually sending emails or removing users</div>
+                </div>
+            </div>
+
+            <!-- Navigation Buttons -->
+            <div class="flex justify-between mt-2">
+                <button type="button" class="btn btn-secondary" id="prevBtn" onclick="changeStep(-1)" style="display: none;">
+                    Previous
+                </button>
+                <div style="flex: 1;"></div>
+                <button type="button" class="btn btn-primary" id="nextBtn" onclick="changeStep(1)">
+                    Next
+                </button>
+                <button type="submit" class="btn btn-success" id="finishBtn" style="display: none;">
+                    Complete Setup
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .setup-step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        opacity: 0.4;
+        transition: opacity 0.3s;
+    }
+
+    .setup-step.active {
+        opacity: 1;
+    }
+
+    .setup-step.completed .step-number {
+        background: var(--success);
+        border-color: var(--success);
+    }
+
+    .step-number {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        color: var(--text-primary);
+    }
+
+    .setup-step.active .step-number {
+        border-color: var(--centauri-cyan);
+        color: var(--centauri-cyan);
+    }
+
+    .step-label {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+</style>
+
+<script>
+    let currentStep = 1;
+    const totalSteps = 5;
+    const config = {};
+
+    function changeStep(direction) {
+        // Validate current step before proceeding
+        if (direction > 0 && !validateStep(currentStep)) {
+            return;
+        }
+
+        // Save current step data
+        const currentContent = document.querySelector(`.setup-content[data-step="${currentStep}"]`);
+        currentContent.querySelectorAll('input').forEach(input => {
+            if (input.type === 'checkbox') {
+                config[input.name] = input.checked ? 'true' : 'false';
+            } else {
+                config[input.name] = input.value;
+            }
+        });
+
+        // Update step
+        currentStep += direction;
+        if (currentStep < 1) currentStep = 1;
+        if (currentStep > totalSteps) currentStep = totalSteps;
+
+        // Update UI
+        document.querySelectorAll('.setup-content').forEach(content => {
+            content.style.display = 'none';
+        });
+        document.querySelector(`.setup-content[data-step="${currentStep}"]`).style.display = 'block';
+
+        document.querySelectorAll('.setup-step').forEach((step, index) => {
+            step.classList.remove('active', 'completed');
+            if (index + 1 === currentStep) {
+                step.classList.add('active');
+            } else if (index + 1 < currentStep) {
+                step.classList.add('completed');
+            }
+        });
+
+        // Update buttons
+        document.getElementById('prevBtn').style.display = currentStep === 1 ? 'none' : 'block';
+        document.getElementById('nextBtn').style.display = currentStep === totalSteps ? 'none' : 'block';
+        document.getElementById('finishBtn').style.display = currentStep === totalSteps ? 'block' : 'none';
+    }
+
+    function validateStep(step) {
+        const content = document.querySelector(`.setup-content[data-step="${step}"]`);
+        const required = content.querySelectorAll('[required]');
+        
+        for (let input of required) {
+            if (!input.value.trim()) {
+                showAlert(`Please fill in: ${input.previousElementSibling.textContent}`, 'error');
+                input.focus();
+                return false;
+            }
+        }
+        return true;
+    }
+
+    async function testPlex() {
+        try {
+            const token = document.querySelector('[name="PLEX_TOKEN"]').value;
+            if (!token) {
+                showAlert('Please enter Plex token first', 'error');
+                return;
+            }
+
+            // Temporarily set env
+            const oldToken = config.PLEX_TOKEN;
+            config.PLEX_TOKEN = token;
+            
+            const result = await API.post('/api/test/plex', config);
+            document.getElementById('plexStatus').innerHTML = `
+                <div class="alert alert-success mt-1">
+                    ✓ Connected as ${result.username} (${result.user_count} users found)
+                </div>
+            `;
+        } catch (error) {
+            document.getElementById('plexStatus').innerHTML = `
+                <div class="alert alert-error mt-1">✗ ${error.message}</div>
+            `;
+        }
+    }
+
+    async function testTautulli() {
+        try {
+            const url = document.querySelector('[name="TAUTULLI_URL"]').value;
+            const key = document.querySelector('[name="TAUTULLI_API_KEY"]').value;
+            
+            if (!url || !key) {
+                showAlert('Please enter Tautulli URL and API key first', 'error');
+                return;
+            }
+
+            config.TAUTULLI_URL = url;
+            config.TAUTULLI_API_KEY = key;
+            
+            const result = await API.post('/api/test/tautulli', config);
+            document.getElementById('tautulliStatus').innerHTML = `
+                <div class="alert alert-success mt-1">
+                    ✓ Connected (${result.user_count} users found)
+                </div>
+            `;
+        } catch (error) {
+            document.getElementById('tautulliStatus').innerHTML = `
+                <div class="alert alert-error mt-1">✗ ${error.message}</div>
+            `;
+        }
+    }
+
+    async function testEmail() {
+        try {
+            const email = document.querySelector('[name="ADMIN_EMAIL"]').value;
+            if (!email) {
+                showAlert('Please enter admin email first', 'error');
+                return;
+            }
+
+            // Gather email config
+            ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USERNAME', 'SMTP_PASSWORD', 'SMTP_FROM', 'ADMIN_EMAIL'].forEach(key => {
+                const input = document.querySelector(`[name="${key}"]`);
+                if (input) config[key] = input.value;
+            });
+
+            const result = await API.post('/api/test/email', { ...config, email });
+            document.getElementById('emailStatus').innerHTML = `
+                <div class="alert alert-success mt-1">✓ Test email sent to ${email}</div>
+            `;
+        } catch (error) {
+            document.getElementById('emailStatus').innerHTML = `
+                <div class="alert alert-error mt-1">✗ ${error.message}</div>
+            `;
+        }
+    }
+
+    async function testDiscord() {
+        try {
+            const webhook = document.querySelector('[name="DISCORD_WEBHOOK"]').value;
+            if (!webhook) {
+                showAlert('Please enter Discord webhook URL first', 'error');
+                return;
+            }
+
+            config.DISCORD_WEBHOOK = webhook;
+            
+            const result = await API.post('/api/test/discord', config);
+            document.getElementById('discordStatus').innerHTML = `
+                <div class="alert alert-success mt-1">✓ Test messages sent to Discord</div>
+            `;
+        } catch (error) {
+            document.getElementById('discordStatus').innerHTML = `
+                <div class="alert alert-error mt-1">✗ ${error.message}</div>
+            `;
+        }
+    }
+
+    document.getElementById('setupForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        // Gather all config
+        document.querySelectorAll('.setup-content input').forEach(input => {
+            if (input.type === 'checkbox') {
+                config[input.name] = input.checked ? 'true' : 'false';
+            } else {
+                config[input.name] = input.value;
+            }
+        });
+
+        try {
+            await API.post('/api/setup/complete', config);
+            showAlert('Setup completed successfully! Redirecting...', 'success');
+            setTimeout(() => window.location.href = '/dashboard', 2000);
+        } catch (error) {
+            showAlert(`Setup failed: ${error.message}`, 'error');
+        }
+    });
+</script>
+{% endblock %}

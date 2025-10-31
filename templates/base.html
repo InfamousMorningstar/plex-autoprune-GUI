@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Plex-Auto-Prune GUI{% endblock %} - Plex User Management</title>
+    
+    <style>
+        :root {
+            --centauri-cyan: #00d4ff;
+            --centauri-purple: #a855f7;
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #121218;
+            --bg-tertiary: #1a1a24;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --text-muted: #606060;
+            --border-color: #2a2a3a;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', 'Consolas', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 2px solid var(--centauri-cyan);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--centauri-cyan), var(--centauri-purple));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            color: var(--centauri-cyan);
+            font-weight: normal;
+        }
+        
+        .header h1 span {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+        
+        /* Navigation */
+        .nav {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .nav-link {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            color: var(--text-secondary);
+            text-decoration: none;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        .nav-link:hover {
+            color: var(--centauri-cyan);
+            border-color: var(--centauri-cyan);
+        }
+        
+        .nav-link.active {
+            background: var(--bg-tertiary);
+            color: var(--centauri-cyan);
+            border-color: var(--centauri-cyan);
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .card-title {
+            font-size: 1.25rem;
+            color: var(--centauri-cyan);
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: var(--centauri-cyan);
+            color: var(--bg-primary);
+        }
+        
+        .btn-primary:hover {
+            background: #00b8e6;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-secondary:hover {
+            border-color: var(--centauri-cyan);
+            color: var(--centauri-cyan);
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-family: inherit;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--centauri-cyan);
+        }
+        
+        .form-hint {
+            margin-top: 0.25rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        
+        /* Badges */
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: normal;
+        }
+        
+        .badge-success { background: var(--success); color: white; }
+        .badge-warning { background: var(--warning); color: white; }
+        .badge-danger { background: var(--danger); color: white; }
+        .badge-info { background: var(--info); color: white; }
+        
+        /* Alerts */
+        .alert {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+        
+        .alert-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+        
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+        }
+        
+        .alert-info {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid var(--centauri-cyan);
+            color: var(--centauri-cyan);
+        }
+        
+        /* Loading Spinner */
+        .spinner {
+            border: 3px solid var(--bg-tertiary);
+            border-top: 3px solid var(--centauri-cyan);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Table */
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .table th {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 2px solid var(--border-color);
+            color: var(--text-secondary);
+            font-weight: normal;
+        }
+        
+        .table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .table tr:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        /* Status Indicator */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+        
+        .status-dot.online { background: var(--success); }
+        .status-dot.offline { background: var(--danger); }
+        
+        /* Utility Classes */
+        .text-center { text-align: center; }
+        .mt-1 { margin-top: 1rem; }
+        .mt-2 { margin-top: 2rem; }
+        .mb-1 { margin-bottom: 1rem; }
+        .mb-2 { margin-bottom: 2rem; }
+        .flex { display: flex; }
+        .gap-1 { gap: 1rem; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if not is_setup %}
+    <div class="header">
+        <div class="header-title">
+            <div class="logo">P</div>
+            <h1>PLEX-AUTO-PRUNE GUI <span>/ Plex User Management</span></h1>
+        </div>
+        <nav class="nav">
+            <a href="/dashboard" class="nav-link {% if request.path == '/dashboard' or request.path == '/' %}active{% endif %}">Dashboard</a>
+            <a href="/users" class="nav-link {% if request.path == '/users' %}active{% endif %}">Users</a>
+            <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">Settings</a>
+            <a href="/logs" class="nav-link {% if request.path == '/logs' %}active{% endif %}">Logs</a>
+        </nav>
+    </div>
+    {% endif %}
+    
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // Common utilities
+        const API = {
+            async get(url) {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(await res.text());
+                return res.json();
+            },
+            async post(url, data = {}) {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (!res.ok) throw new Error(await res.text());
+                return res.json();
+            }
+        };
+        
+        function showAlert(message, type = 'info') {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            document.querySelector('.container').prepend(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

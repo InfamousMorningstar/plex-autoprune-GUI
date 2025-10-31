@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<h1 style="color: var(--centauri-cyan); margin-bottom: 2rem;">Settings</h1>
+
+<form id="settingsForm">
+    <!-- Plex Settings -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Plex Configuration</h2>
+            <button type="button" class="btn btn-primary" onclick="testPlex()">Test Connection</button>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Plex Token</label>
+            <input type="password" name="PLEX_TOKEN" class="form-input" required>
+            <div class="form-hint">Your Plex authentication token</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Server Name</label>
+            <input type="text" name="PLEX_SERVER_NAME" class="form-input">
+            <div class="form-hint">Display name for your server</div>
+        </div>
+
+        <div id="plexStatus"></div>
+    </div>
+
+    <!-- Tautulli Settings -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Tautulli Configuration</h2>
+            <button type="button" class="btn btn-primary" onclick="testTautulli()">Test Connection</button>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Tautulli URL</label>
+            <input type="url" name="TAUTULLI_URL" class="form-input" required>
+            <div class="form-hint">Full URL to your Tautulli instance (e.g., http://192.168.1.100:8181)</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">API Key</label>
+            <input type="password" name="TAUTULLI_API_KEY" class="form-input" required>
+            <div class="form-hint">Tautulli API key from Settings → Web Interface</div>
+        </div>
+
+        <div id="tautulliStatus"></div>
+    </div>
+
+    <!-- Email Settings -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Email Configuration</h2>
+            <button type="button" class="btn btn-primary" onclick="testEmail()">Send Test Email</button>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 3fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label class="form-label">SMTP Server</label>
+                <input type="text" name="SMTP_HOST" class="form-input" value="smtp.gmail.com" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Port</label>
+                <input type="number" name="SMTP_PORT" class="form-input" value="587" required>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" name="SMTP_USERNAME" class="form-input" required>
+            <div class="form-hint">Gmail address to send from</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">App Password</label>
+            <input type="password" name="SMTP_PASSWORD" class="form-input" required>
+            <div class="form-hint">Gmail app password (not your regular password)</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">From Name</label>
+            <input type="text" name="SMTP_FROM" class="form-input" placeholder='"Plex Admin" <you@gmail.com>'>
+            <div class="form-hint">Display name in sent emails</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Admin Email</label>
+            <input type="email" name="ADMIN_EMAIL" class="form-input" required>
+            <div class="form-hint">Where to send admin notifications</div>
+        </div>
+
+        <div id="emailStatus"></div>
+    </div>
+
+    <!-- Discord Settings -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Discord Integration (Optional)</h2>
+            <button type="button" class="btn btn-primary" onclick="testDiscord()">Send Test Message</button>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Webhook URL</label>
+            <input type="url" name="DISCORD_WEBHOOK" class="form-input" placeholder="https://discord.com/api/webhooks/...">
+            <div class="form-hint">Discord webhook for real-time notifications</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Your Discord Profile Link</label>
+            <input type="url" name="LINK_DISCORD" class="form-input" placeholder="https://discord.com/users/123456789">
+            <div class="form-hint">Optional link to your Discord profile</div>
+        </div>
+
+        <div id="discordStatus"></div>
+    </div>
+
+    <!-- Thresholds & Intervals -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Thresholds & Intervals</h2>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div class="form-group">
+                <label class="form-label">Warning Threshold (days)</label>
+                <input type="number" name="WARN_DAYS" class="form-input" value="27" min="1" required>
+                <div class="form-hint">Send warning after this many days of inactivity</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Removal Threshold (days)</label>
+                <input type="number" name="KICK_DAYS" class="form-input" value="30" min="1" required>
+                <div class="form-hint">Remove user after this many days of inactivity</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">New User Check (seconds)</label>
+                <input type="number" name="CHECK_NEW_USERS_SECS" class="form-input" value="120" min="10" required>
+                <div class="form-hint">How often to check for new users</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Inactivity Check (seconds)</label>
+                <input type="number" name="CHECK_INACTIVITY_SECS" class="form-input" value="1800" min="60" required>
+                <div class="form-hint">How often to check user activity</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIP Protection -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">VIP Protection</h2>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Protected Usernames</label>
+            <textarea name="VIP_NAMES" class="form-input" rows="3" placeholder="friend1,family_member,bestfriend"></textarea>
+            <div class="form-hint">Comma-separated list of usernames to protect from auto-removal</div>
+        </div>
+    </div>
+
+    <!-- Operating Mode -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Operating Mode</h2>
+        </div>
+        
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 1rem; cursor: pointer;">
+                <input type="checkbox" name="DRY_RUN" id="dryRunCheckbox" style="width: 20px; height: 20px;">
+                <div>
+                    <div style="font-weight: bold;">DRY RUN Mode</div>
+                    <div class="form-hint" style="margin: 0;">
+                        When enabled, all actions are logged but NOT executed (no emails sent, no users removed)
+                    </div>
+                </div>
+            </label>
+        </div>
+
+        <div class="alert alert-info">
+            <strong>⚠ Important:</strong> Keep DRY RUN enabled when testing. Disable only when ready for live operation.
+        </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="card">
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="location.reload()">Cancel</button>
+            <button type="submit" class="btn btn-success">💾 Save Configuration</button>
+        </div>
+    </div>
+</form>
+
+<script>
+    let currentConfig = {};
+
+    async function loadConfig() {
+        try {
+            currentConfig = await API.get('/api/config');
+            
+            // Populate form
+            Object.keys(currentConfig).forEach(key => {
+                const input = document.querySelector(`[name="${key}"]`);
+                if (input) {
+                    if (input.type === 'checkbox') {
+                        input.checked = currentConfig[key] === 'true';
+                    } else {
+                        input.value = currentConfig[key] || '';
+                    }
+                }
+            });
+        } catch (error) {
+            showAlert(`Failed to load configuration: ${error.message}`, 'error');
+        }
+    }
+
+    document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const config = {};
+        
+        for (let [key, value] of formData.entries()) {
+            config[key] = value;
+        }
+        
+        // Handle checkbox separately
+        config.DRY_RUN = document.getElementById('dryRunCheckbox').checked ? 'true' : 'false';
+        
+        try {
+            await API.post('/api/config', config);
+            showAlert('Configuration saved successfully!', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } catch (error) {
+            showAlert(`Failed to save: ${error.message}`, 'error');
+        }
+    });
+
+    async function testPlex() {
+        showTestStatus('plexStatus', 'Testing Plex connection...', 'info');
+        
+        try {
+            const config = getFormConfig();
+            const result = await API.post('/api/test/plex', config);
+            showTestStatus('plexStatus', 
+                `✓ Connected as ${result.username} (${result.user_count} users found)`, 
+                'success'
+            );
+        } catch (error) {
+            showTestStatus('plexStatus', `✗ Connection failed: ${error.message}`, 'error');
+        }
+    }
+
+    async function testTautulli() {
+        showTestStatus('tautulliStatus', 'Testing Tautulli connection...', 'info');
+        
+        try {
+            const config = getFormConfig();
+            const result = await API.post('/api/test/tautulli', config);
+            showTestStatus('tautulliStatus', 
+                `✓ Connected (${result.user_count} users found)`, 
+                'success'
+            );
+        } catch (error) {
+            showTestStatus('tautulliStatus', `✗ Connection failed: ${error.message}`, 'error');
+        }
+    }
+
+    async function testEmail() {
+        const email = document.querySelector('[name="ADMIN_EMAIL"]').value;
+        if (!email) {
+            showAlert('Please enter an admin email address first', 'error');
+            return;
+        }
+
+        showTestStatus('emailStatus', `Sending test email to ${email}...`, 'info');
+        
+        try {
+            const config = getFormConfig();
+            await API.post('/api/test/email', { ...config, email });
+            showTestStatus('emailStatus', 
+                `✓ Test email sent to ${email}. Check your inbox!`, 
+                'success'
+            );
+        } catch (error) {
+            showTestStatus('emailStatus', `✗ Email failed: ${error.message}`, 'error');
+        }
+    }
+
+    async function testDiscord() {
+        const webhook = document.querySelector('[name="DISCORD_WEBHOOK"]').value;
+        if (!webhook) {
+            showAlert('Please enter a Discord webhook URL first', 'error');
+            return;
+        }
+
+        showTestStatus('discordStatus', 'Sending test Discord notifications...', 'info');
+        
+        try {
+            const config = getFormConfig();
+            await API.post('/api/test/discord', config);
+            showTestStatus('discordStatus', 
+                '✓ Test messages sent to Discord. Check your channel!', 
+                'success'
+            );
+        } catch (error) {
+            showTestStatus('discordStatus', `✗ Discord test failed: ${error.message}`, 'error');
+        }
+    }
+
+    function getFormConfig() {
+        const formData = new FormData(document.getElementById('settingsForm'));
+        const config = {};
+        for (let [key, value] of formData.entries()) {
+            config[key] = value;
+        }
+        config.DRY_RUN = document.getElementById('dryRunCheckbox').checked ? 'true' : 'false';
+        return config;
+    }
+
+    function showTestStatus(elementId, message, type) {
+        const statusDiv = document.getElementById(elementId);
+        statusDiv.innerHTML = `<div class="alert alert-${type === 'error' ? 'error' : type === 'success' ? 'success' : 'info'} mt-1">${message}</div>`;
+        
+        if (type === 'success' || type === 'error') {
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
+        }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', loadConfig);
+</script>
+{% endblock %}
