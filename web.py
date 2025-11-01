@@ -298,6 +298,9 @@ def index():
     has_email = is_email_configured()
     fully_configured = has_plex and has_tautulli and has_email
     
+    # Debug logging
+    web_log(f"Routing check - Plex: {has_plex}, Tautulli: {has_tautulli}, Email: {has_email}, Session: {bool(session.get('plex_token'))}", "DEBUG")
+    
     # Route 1: No Plex credentials → Show login page
     if not has_plex:
         if not session.get('plex_token'):
