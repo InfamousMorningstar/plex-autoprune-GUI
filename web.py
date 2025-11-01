@@ -298,17 +298,34 @@ def logout():
 def index():
     """Main entry point - smart routing based on configuration state"""
     
+    # Check if we have a session token and verify it's valid
+    session_token = session.get('plex_token')
+    session_valid = False
+    
+    if session_token:
+        # Verify the session token is actually valid
+        try:
+            verification = verify_plex_token(session_token)
+            session_valid = verification['valid']
+            if not session_valid:
+                # Token in session is invalid/expired - clear it
+                session.clear()
+                web_log("Session token invalid, cleared session", "DEBUG")
+        except Exception:
+            session.clear()
+            session_valid = False
+    
     # If no Plex token in environment, force login
     if not is_plex_configured():
-        # But first check if user just logged in via session
-        if session.get('plex_token'):
+        # But first check if user just logged in via valid session
+        if session_valid:
             # User logged in but config not saved yet - show setup to save it
             return render_template('setup.html')
         # Not logged in at all - redirect to login
         return redirect(url_for('login'))
     
     # Plex is configured - check if user is logged in via session
-    if not session.get('plex_token'):
+    if not session_valid:
         return redirect(url_for('login'))
     
     # User is logged in and Plex is configured
