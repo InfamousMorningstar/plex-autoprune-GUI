@@ -298,43 +298,26 @@ def logout():
 def index():
     """Main entry point - smart routing based on configuration state"""
     
-    # Check if we have a session token and verify it's valid
-    session_token = session.get('plex_token')
-    session_valid = False
+    # Simple check: do we have a session?
+    has_session = bool(session.get('plex_token'))
     
-    if session_token:
-        # Verify the session token is actually valid
-        try:
-            verification = verify_plex_token(session_token)
-            session_valid = verification['valid']
-            if not session_valid:
-                # Token in session is invalid/expired - clear it
-                session.clear()
-                web_log("Session token invalid, cleared session", "DEBUG")
-        except Exception:
-            session.clear()
-            session_valid = False
+    # Check what's configured in environment
+    has_plex_config = is_plex_configured()
+    has_full_config = has_plex_config and is_tautulli_configured() and is_email_configured()
     
-    # If no Plex token in environment, force login
-    if not is_plex_configured():
-        # But first check if user just logged in via valid session
-        if session_valid:
-            # User logged in but config not saved yet - show setup to save it
-            return render_template('setup.html')
-        # Not logged in at all - redirect to login
+    # Route 1: No session → Must login first
+    if not has_session:
         return redirect(url_for('login'))
     
-    # Plex is configured - check if user is logged in via session
-    if not session_valid:
-        return redirect(url_for('login'))
-    
-    # User is logged in and Plex is configured
-    # Check if Tautulli and Email are also configured
-    if not is_tautulli_configured() or not is_email_configured():
-        # Missing Tautulli or Email - show setup wizard
+    # Route 2: Has session, but nothing configured yet → Setup wizard
+    if not has_plex_config:
         return render_template('setup.html')
     
-    # Everything configured and user logged in - show dashboard
+    # Route 3: Has Plex but missing Tautulli/Email → Setup wizard
+    if not has_full_config:
+        return render_template('setup.html')
+    
+    # Route 4: Everything configured → Dashboard
     return render_template('dashboard.html')
 
 @app.route('/dashboard')

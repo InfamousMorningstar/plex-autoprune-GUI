@@ -388,7 +388,7 @@
 
 <script>
 let currentStep = 1;
-const totalSteps = 6;
+const totalSteps = 7;
 
 function showStep(step) {
     // Hide all steps
@@ -611,9 +611,9 @@ async function completeSetup() {
         await API.post('/api/config', config);
         await API.post('/api/setup/complete', {});
         
-        showAlert('Setup complete! Redirecting to dashboard...', 'success');
+        showAlert('Setup complete! Redirecting...', 'success');
         setTimeout(() => {
-            window.location.href = '/dashboard';
+            window.location.href = '/';
         }, 1500);
     } catch (error) {
         showAlert(`Setup failed: ${error.message}`, 'error');
