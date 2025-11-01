@@ -67,6 +67,10 @@ ADMIN_EMAIL      = os.environ["ADMIN_EMAIL"]
 WARN_DAYS        = int(os.environ.get("WARN_DAYS","27"))
 KICK_DAYS        = int(os.environ.get("KICK_DAYS","30"))
 
+# Auto-welcome configuration
+AUTO_WELCOME_NEW_USERS = os.environ.get("AUTO_WELCOME_NEW_USERS", "true").lower() in ("true", "1", "yes")
+AUTO_WELCOME_DELAY_HOURS = int(os.environ.get("AUTO_WELCOME_DELAY_HOURS", "0"))
+
 CHECK_NEW_USERS_SECS   = int(os.environ.get("CHECK_NEW_USERS_SECS","120"))
 CHECK_INACTIVITY_SECS  = int(os.environ.get("CHECK_INACTIVITY_SECS","1800"))
 
@@ -1053,22 +1057,45 @@ def fast_join_watcher():
                 # New user detected (not yet welcomed)
                 log(f"[join] NEW: {display} ({email or 'no email'}) id={uid}")
                 
-                if DRY_RUN:
-                    log(f"[DRY RUN] Would send welcome email to {display} ({email or 'no email'})")
-                else:
-                    if email:
+                # Mark user as detected but check if we should delay welcome
+                if AUTO_WELCOME_NEW_USERS:
+                    # Check if we need to delay the welcome
+                    if AUTO_WELCOME_DELAY_HOURS > 0:
+                        # Store detection time if not already stored
+                        if uid not in welcomed:
+                            welcomed[uid] = now.isoformat()
+                            log(f"[join] User detected, welcome delayed by {AUTO_WELCOME_DELAY_HOURS} hours")
+                            continue
+                        
+                        # Check if enough time has passed
+                        detected_time = dtp.parse(welcomed[uid])
+                        hours_since_join = (now - detected_time).total_seconds() / 3600
+                        
+                        if hours_since_join < AUTO_WELCOME_DELAY_HOURS:
+                            log(f"[join] Delay not met yet ({hours_since_join:.1f}/{AUTO_WELCOME_DELAY_HOURS} hours)")
+                            continue
+                        
+                        log(f"[join] Delay period met, sending welcome now")
+                    
+                    # Send welcome emails
+                    if DRY_RUN:
+                        log(f"[DRY RUN] Would send welcome email to {display} ({email or 'no email'})")
+                    else:
+                        if email:
+                            try:
+                                send_email(email, "Access confirmed", welcome_email_html(display))
+                                log(f"[join] welcome sent -> {email}")
+                            except Exception as e:
+                                log(f"[join] welcome email error: {e}")
                         try:
-                            send_email(email, "Access confirmed", welcome_email_html(display))
-                            log(f"[join] welcome sent -> {email}")
+                            send_email(ADMIN_EMAIL, "Centauri: New member onboarded",
+                                       admin_join_html({"id": uid, "title": display, "email": email}))
+                            log(f"[join] admin notice sent")
                         except Exception as e:
-                            log(f"[join] welcome email error: {e}")
-                    try:
-                        send_email(ADMIN_EMAIL, "Centauri: New member onboarded",
-                                   admin_join_html({"id": uid, "title": display, "email": email}))
-                        log(f"[join] admin notice sent")
-                    except Exception as e:
-                        log(f"[join] admin email error: {e}")
-                    send_discord(f"👤 New Plex user joined: {display} ({email or 'no email'})")
+                            log(f"[join] admin email error: {e}")
+                        send_discord(f"👤 New Plex user joined: {display} ({email or 'no email'})")
+                else:
+                    log(f"[join] AUTO_WELCOME disabled - user tracked but no email sent")
                 
                 welcomed[uid] = now.isoformat()
                 new_count += 1

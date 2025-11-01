@@ -25,7 +25,7 @@ A sophisticated web interface for automated Plex user management. Plex-Auto-Prun
 - **Log Viewer** - Real-time log streaming via WebSockets
 
 ### 🤖 Automated Management
-- **New User Welcome** - Automatic welcome emails for new users
+- **New User Welcome** - Automatically welcome new users (configurable with optional delay)
 - **Inactivity Warnings** - Warning emails at configurable threshold
 - **Auto-Removal** - Remove inactive users after grace period
 - **Rejoined Detection** - Re-welcome users who return after removal
@@ -138,6 +138,8 @@ All configuration is done through the web interface during setup, or via the Set
 |---------|---------|-------------|
 | **WARN_DAYS** | 27 | Days before warning email |
 | **KICK_DAYS** | 30 | Days before removal |
+| **AUTO_WELCOME_NEW_USERS** | true | Automatically send welcome emails to new users |
+| **AUTO_WELCOME_DELAY_HOURS** | 0 | Delay (in hours) before sending welcome email |
 | **VIP_NAMES** | - | Comma-separated usernames to protect |
 | **DISCORD_WEBHOOK** | - | Discord webhook URL for notifications |
 | **DRY_RUN** | true | Test mode (no actual removals) |
@@ -268,6 +270,36 @@ pip install -r requirements.txt
 # Run combined app
 python main.py
 ```
+
+## Auto-Welcome Configuration
+
+By default, the application **automatically sends welcome emails** to new Plex users as soon as they're detected. You can customize this behavior:
+
+### Disable Auto-Welcome
+
+To manually welcome users from the web interface instead:
+
+```bash
+AUTO_WELCOME_NEW_USERS=false
+```
+
+With this setting, new users will appear in the Users page but won't receive welcome emails until you click the "✉ Welcome" button.
+
+### Add Welcome Delay
+
+To give users time to set up their account before receiving the welcome email:
+
+```bash
+AUTO_WELCOME_NEW_USERS=true
+AUTO_WELCOME_DELAY_HOURS=24
+```
+
+This will wait 24 hours after a user joins before sending the welcome email. Useful for:
+- Letting users complete their profile first
+- Avoiding overwhelming new users immediately
+- Giving yourself time to verify the user before they get welcomed
+
+**Note:** The daemon checks every `CHECK_NEW_USERS_SECS` (default 2 minutes), so delays are approximate.
 
 ## Customizing Email Templates
 
