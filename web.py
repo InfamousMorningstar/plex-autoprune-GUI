@@ -296,35 +296,26 @@ def logout():
 def index():
     """Main entry point - smart routing based on configuration state"""
     
-    # Check what's configured
-    has_plex = is_plex_configured()
-    has_tautulli = is_tautulli_configured()
-    has_email = is_email_configured()
-    fully_configured = has_plex and has_tautulli and has_email
-    
-    # Debug logging
-    web_log(f"Routing check - Plex: {has_plex}, Tautulli: {has_tautulli}, Email: {has_email}, Session: {bool(session.get('plex_token'))}", "DEBUG")
-    
-    # Route 1: No Plex credentials → Show login page
-    if not has_plex:
-        if not session.get('plex_token'):
-            return redirect(url_for('login'))
-        # Has session but no saved config - go to setup
-        return render_template('setup.html')
-    
-    # Route 2: Has Plex, missing Tautulli/Email → Show setup wizard
-    if not fully_configured:
-        # Make sure user is logged in
-        if not session.get('plex_token'):
-            return redirect(url_for('login'))
-        return render_template('setup.html')
-    
-    # Route 3: Everything configured → Show dashboard
-    if not session.get('plex_token'):
-        # Fully configured but not logged in
+    # If no Plex token in environment, force login
+    if not is_plex_configured():
+        # But first check if user just logged in via session
+        if session.get('plex_token'):
+            # User logged in but config not saved yet - show setup to save it
+            return render_template('setup.html')
+        # Not logged in at all - redirect to login
         return redirect(url_for('login'))
     
-    # All good - show dashboard
+    # Plex is configured - check if user is logged in via session
+    if not session.get('plex_token'):
+        return redirect(url_for('login'))
+    
+    # User is logged in and Plex is configured
+    # Check if Tautulli and Email are also configured
+    if not is_tautulli_configured() or not is_email_configured():
+        # Missing Tautulli or Email - show setup wizard
+        return render_template('setup.html')
+    
+    # Everything configured and user logged in - show dashboard
     return render_template('dashboard.html')
 
 @app.route('/dashboard')
