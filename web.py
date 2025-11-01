@@ -194,9 +194,8 @@ def save_env_config(config):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Login page with Plex OAuth"""
-    # Check if already authenticated
-    if session.get('plex_token'):
-        return redirect(url_for('index'))
+    # Don't redirect if already logged in - just show login page
+    # This prevents redirect loops
     
     # Handle PIN callback from Plex
     if request.args.get('pinID'):
@@ -263,17 +262,8 @@ def login():
             web_log(f"Plex OAuth error: {e}", "ERROR")
             return render_template('login.html', error=f'Authentication failed: {str(e)}')
     
-    # Check if we have saved auth
-    saved_auth = load_plex_auth()
-    if saved_auth and saved_auth.get('token'):
-        verification = verify_plex_token(saved_auth['token'])
-        if verification['valid']:
-            session['plex_token'] = saved_auth['token']
-            session['plex_username'] = verification['username']
-            session['plex_email'] = verification['email']
-            session.permanent = True
-            return redirect(url_for('index'))
-    
+    # Don't auto-login from saved auth - let user click login button
+    # This prevents redirect loops
     return render_template('login.html')
 
 @app.route('/logout')
@@ -298,28 +288,18 @@ def logout():
 def index():
     """Main entry point - smart routing based on configuration state"""
     
-    # Check if session token exists and validate it
-    session_token = session.get('plex_token')
-    has_valid_session = False
-    
-    if session_token:
-        # Quick validation: check if it looks like a valid token (20+ chars)
-        if len(str(session_token)) > 20:
-            has_valid_session = True
-        else:
-            # Invalid token in session, clear it
-            session.clear()
-            web_log("Cleared invalid session token", "DEBUG")
+    # Simple check: do we have a session token?
+    has_session = bool(session.get('plex_token'))
     
     # Check what's configured in environment
     has_plex_config = is_plex_configured()
     has_full_config = has_plex_config and is_tautulli_configured() and is_email_configured()
     
-    # Route 1: No valid session → Must login first
-    if not has_valid_session:
+    # Route 1: No session → Must login first
+    if not has_session:
         return redirect(url_for('login'))
     
-    # Route 2: Has session, but nothing configured yet → Setup wizard
+    # Route 2: Has session, but Plex not configured in .env yet → Setup wizard
     if not has_plex_config:
         return render_template('setup.html')
     
