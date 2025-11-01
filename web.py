@@ -495,6 +495,7 @@ def api_users():
         
         # Get current VIP names using daemon's dynamic function
         vip_names = daemon.get_vip_names()
+        web_log(f"Loaded VIP names: {vip_names}", "DEBUG")
         
         users_data = []
         
@@ -519,6 +520,10 @@ def api_users():
             
             # Check VIP status - match by username OR email (for pending invites)
             is_vip = username in vip_names or email in vip_names
+            
+            # Debug logging for VIP status
+            if is_vip:
+                web_log(f"User {username or email} is VIP (found in: {vip_names})", "DEBUG")
             
             # Get last activity
             last_watch = None
