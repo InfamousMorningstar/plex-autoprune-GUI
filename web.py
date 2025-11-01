@@ -655,6 +655,71 @@ def api_user_toggle_vip(user_id):
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
+@app.route('/api/users/import', methods=['POST'])
+@api_login_required
+def api_import_users():
+    """Import all existing Plex users and mark them as welcomed"""
+    try:
+        # Get all Plex users
+        plex_users = daemon.plex_get_users()
+        
+        # Load current state
+        state = daemon.load_state()
+        welcomed = state.get('welcomed', {})
+        
+        # Track imported users
+        imported = []
+        skipped = []
+        
+        now = datetime.now(timezone.utc).isoformat()
+        
+        for user in plex_users:
+            uid = str(user['id'])
+            display_name = user['title'] or user['username'] or 'Unknown User'
+            email = user['email'] or ''
+            
+            # Skip if already welcomed
+            if uid in welcomed:
+                skipped.append({
+                    'id': uid,
+                    'name': display_name,
+                    'email': email,
+                    'reason': 'Already welcomed'
+                })
+                continue
+            
+            # Add to welcomed list
+            welcomed[uid] = {
+                'timestamp': now,
+                'display_name': display_name,
+                'email': email,
+                'imported': True  # Flag to indicate this was imported, not auto-discovered
+            }
+            
+            imported.append({
+                'id': uid,
+                'name': display_name,
+                'email': email
+            })
+        
+        # Save updated state
+        state['welcomed'] = welcomed
+        daemon.save_state(state)
+        
+        web_log(f"Imported {len(imported)} existing Plex users, skipped {len(skipped)}", "INFO")
+        
+        return jsonify({
+            'success': True,
+            'imported': imported,
+            'skipped': skipped,
+            'total_imported': len(imported),
+            'total_skipped': len(skipped)
+        })
+        
+    except Exception as e:
+        web_log(f"Error importing users: {str(e)}", "ERROR")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/test/email', methods=['POST'])
 def api_test_email():
     """Send test email with improved error handling"""

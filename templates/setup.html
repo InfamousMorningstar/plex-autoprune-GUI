@@ -249,8 +249,50 @@
             </div>
         </div>
 
-        <!-- Step 6: Complete -->
+        <!-- Step 6: Import Existing Users -->
         <div class="setup-content card" data-step="6" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">► Step 6: Import Existing Users (Optional)</h2>
+            </div>
+            <div class="card-body">
+                <p style="color: var(--text-secondary); margin-bottom: 24px;">
+                    Import all existing Plex users and mark them as welcomed. This prevents sending welcome emails to users who are already on your server.
+                </p>
+                
+                <div id="importStatus" style="display: none; padding: 16px; border-radius: 4px; margin-bottom: 16px;"></div>
+                
+                <div id="importPreview" style="display: none; margin-bottom: 24px;">
+                    <h4 style="color: var(--text-primary); margin-bottom: 12px;">Users to Import:</h4>
+                    <div id="importUserList" style="max-height: 300px; overflow-y: auto; background: var(--term-surface-2); border: 1px solid var(--term-border); border-radius: 4px; padding: 12px;">
+                        <!-- Users will be listed here -->
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-primary" onclick="previewImportUsers()">
+                        📋 Preview Users
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="importExistingUsers()" id="importBtn" disabled>
+                        ✓ Import All Users
+                    </button>
+                    <button type="button" class="btn" onclick="skipImport()">
+                        Skip This Step →
+                    </button>
+                </div>
+
+                <div style="margin-top: 24px; padding: 12px; background: var(--term-surface-2); border-left: 3px solid var(--brand-info); border-radius: 4px;">
+                    <div style="font-weight: bold; color: var(--brand-info); margin-bottom: 8px;">ℹ️ Note:</div>
+                    <div style="color: var(--text-muted); font-size: 11px; line-height: 1.6;">
+                        • If you skip this step, the daemon will automatically discover and welcome new users over time<br>
+                        • Imported users will not receive welcome emails<br>
+                        • You can always manually manage users later from the Users page
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 7: Complete -->
+        <div class="setup-content card" data-step="7" style="display: none;">
             <div class="card-header">
                 <h2 class="card-title">► Setup Complete!</h2>
             </div>
@@ -471,6 +513,90 @@ async function testDiscord() {
     }
 }
 
+async function previewImportUsers() {
+    const statusDiv = document.getElementById('importStatus');
+    const previewDiv = document.getElementById('importPreview');
+    const userListDiv = document.getElementById('importUserList');
+    const importBtn = document.getElementById('importBtn');
+    
+    statusDiv.innerHTML = '<div class="alert alert-info">Loading users from Plex...</div>';
+    statusDiv.style.display = 'block';
+    previewDiv.style.display = 'none';
+    
+    try {
+        const response = await API.get('/api/users');
+        const users = response;
+        
+        if (users.length === 0) {
+            statusDiv.innerHTML = '<div class="alert alert-warning">No users found on your Plex server.</div>';
+            return;
+        }
+        
+        // Filter out users that would be imported (not already welcomed)
+        const toImport = users.filter(u => u.status === 'new');
+        const alreadyWelcomed = users.filter(u => u.status !== 'new');
+        
+        if (toImport.length === 0) {
+            statusDiv.innerHTML = '<div class="alert alert-info">All users have already been welcomed. Nothing to import.</div>';
+            importBtn.disabled = true;
+            return;
+        }
+        
+        // Show user list
+        userListDiv.innerHTML = toImport.map(u => `
+            <div style="display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid var(--term-border);">
+                <div>
+                    <div style="font-weight: bold; color: var(--text-primary);">${u.name}</div>
+                    <div style="color: var(--text-muted); font-size: 11px;">${u.email || 'No email'}</div>
+                </div>
+                <span class="badge badge-info">New</span>
+            </div>
+        `).join('');
+        
+        statusDiv.innerHTML = `<div class="alert alert-success">Found ${toImport.length} user(s) to import${alreadyWelcomed.length > 0 ? `, ${alreadyWelcomed.length} already welcomed` : ''}.</div>`;
+        previewDiv.style.display = 'block';
+        importBtn.disabled = false;
+        
+    } catch (error) {
+        statusDiv.innerHTML = `<div class="alert alert-danger">Failed to load users: ${error.message}</div>`;
+    }
+}
+
+async function importExistingUsers() {
+    const statusDiv = document.getElementById('importStatus');
+    const importBtn = document.getElementById('importBtn');
+    
+    importBtn.disabled = true;
+    importBtn.textContent = 'Importing...';
+    statusDiv.innerHTML = '<div class="alert alert-info">Importing users...</div>';
+    statusDiv.style.display = 'block';
+    
+    try {
+        const result = await API.post('/api/users/import');
+        
+        statusDiv.innerHTML = `
+            <div class="alert alert-success">
+                ✓ Successfully imported ${result.total_imported} user(s)!
+                ${result.total_skipped > 0 ? `<br>Skipped ${result.total_skipped} user(s) (already welcomed)` : ''}
+            </div>
+        `;
+        
+        // Auto-advance to next step after 2 seconds
+        setTimeout(() => {
+            nextStep();
+        }, 2000);
+        
+    } catch (error) {
+        statusDiv.innerHTML = `<div class="alert alert-danger">Import failed: ${error.message}</div>`;
+        importBtn.disabled = false;
+        importBtn.textContent = '✓ Import All Users';
+    }
+}
+
+function skipImport() {
+    nextStep();
+}
+
 async function completeSetup() {
     try {
         const formData = new FormData(document.getElementById('setupForm'));
@@ -492,6 +618,7 @@ async function completeSetup() {
     } catch (error) {
         showAlert(`Setup failed: ${error.message}`, 'error');
     }
+}
 }
 
 // Initialize
