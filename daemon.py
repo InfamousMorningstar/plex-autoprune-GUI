@@ -10,7 +10,6 @@ def log(msg):
 from email.mime.text import MIMEText
 from dateutil import parser as dtp
 
-
 # Load .env file if it exists (for persistent configuration)
 def load_env_file(filepath="/app/.env"):
     """Load environment variables from a file if it exists."""
@@ -127,6 +126,10 @@ def send_discord(message):
     except Exception as e:
         log(f"[discord] exception: {e}")
 
+
+# ================================
+# Test Functions
+# ================================
 
 def test_discord_notifications():
     """Send test Discord notifications for all event types"""
@@ -918,6 +921,7 @@ def fast_join_watcher():
                 uid = str(u["id"])
                 display = u["title"] or u["username"] or "there"
                 email = u["email"]
+                username = u["username"] or ""
                 
                 # Check if user was previously removed but is back now
                 if uid in removed:

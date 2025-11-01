@@ -308,7 +308,6 @@ python main.py
 > - 🐛 Performance with 100+ users not validated
 > - 🐛 Some error handling needs improvement
 > - 📋 Advanced analytics dashboard (planned)
-> - 📋 Wizarr integration (planned)
 > - 📋 Mobile app (planned)
 > - 📋 Multi-channel notifications (planned)
 > 
