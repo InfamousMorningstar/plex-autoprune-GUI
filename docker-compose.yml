@@ -15,8 +15,8 @@ services:
     ports:
       - "5000:8080"
     volumes:
-      - ./state:/app/state
-      - ./email_templates:/app/email_templates
+      - plex-auto-prune-state:/app/state
+      - plex-auto-prune-email:/app/email_templates
     environment:
       - TZ=America/New_York  # Change to your timezone
     healthcheck:
@@ -25,3 +25,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+# Named volumes persist across container recreations/redeployments
+volumes:
+  plex-auto-prune-state:
+  plex-auto-prune-email:
