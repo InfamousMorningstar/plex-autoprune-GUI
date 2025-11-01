@@ -152,12 +152,23 @@
                 // Poll for authentication
                 const pollInterval = setInterval(async () => {
                     try {
-                        const checkResponse = await fetch(`/login?pinID=${data.pin_id}`);
-                        if (checkResponse.redirected) {
+                        const checkResponse = await fetch(`/login?pinID=${data.pin_id}`, {
+                            headers: {
+                                'Accept': 'application/json'
+                            }
+                        });
+                        const result = await checkResponse.json();
+                        
+                        if (result.success) {
                             clearInterval(pollInterval);
                             if (authWindow) authWindow.close();
-                            window.location.href = checkResponse.url;
+                            window.location.href = result.redirect || '/';
+                        } else if (result.error) {
+                            clearInterval(pollInterval);
+                            if (authWindow) authWindow.close();
+                            alert('Authentication failed: ' + result.error);
                         }
+                        // If pending, keep polling
                     } catch (err) {
                         console.error('Poll error:', err);
                     }

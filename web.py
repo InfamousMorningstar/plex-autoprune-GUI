@@ -200,6 +200,10 @@ def login():
     # Handle PIN callback from Plex
     if request.args.get('pinID'):
         pin_id = request.args.get('pinID')
+        
+        # Check if this is a polling request (AJAX from JavaScript)
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json
+        
         try:
             # Check PIN status
             pin_url = f"https://plex.tv/api/v2/pins/{pin_id}"
@@ -253,10 +257,18 @@ def login():
                     
                     web_log(f"Plex login successful: {verification['username']}", "SUCCESS")
                     
+                    # Return JSON for AJAX requests, redirect for normal requests
+                    if is_ajax:
+                        return jsonify({'success': True, 'redirect': url_for('index')})
                     return redirect(url_for('index'))
                 else:
+                    if is_ajax:
+                        return jsonify({'success': False, 'error': 'Invalid Plex token'})
                     return render_template('login.html', error='Invalid Plex token')
             else:
+                # Still waiting for authentication
+                if is_ajax:
+                    return jsonify({'success': False, 'pending': True})
                 return render_template('login.html', error='Plex authentication pending')
         except Exception as e:
             web_log(f"Plex OAuth error: {e}", "ERROR")
