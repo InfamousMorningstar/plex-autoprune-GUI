@@ -298,15 +298,25 @@ def logout():
 def index():
     """Main entry point - smart routing based on configuration state"""
     
-    # Simple check: do we have a session?
-    has_session = bool(session.get('plex_token'))
+    # Check if session token exists and validate it
+    session_token = session.get('plex_token')
+    has_valid_session = False
+    
+    if session_token:
+        # Quick validation: check if it looks like a valid token (20+ chars)
+        if len(str(session_token)) > 20:
+            has_valid_session = True
+        else:
+            # Invalid token in session, clear it
+            session.clear()
+            web_log("Cleared invalid session token", "DEBUG")
     
     # Check what's configured in environment
     has_plex_config = is_plex_configured()
     has_full_config = has_plex_config and is_tautulli_configured() and is_email_configured()
     
-    # Route 1: No session → Must login first
-    if not has_session:
+    # Route 1: No valid session → Must login first
+    if not has_valid_session:
         return redirect(url_for('login'))
     
     # Route 2: Has session, but nothing configured yet → Setup wizard
@@ -890,11 +900,16 @@ def api_test_plex():
             acct = daemon.get_plex_account()
             users = daemon.plex_get_users()
             web_log(f"Plex connection successful: {len(users)} users", "SUCCESS")
+            
+            # Safely get username and email (handle encoding issues)
+            username = getattr(acct, 'username', 'Unknown')
+            email = getattr(acct, 'email', '')
+            
             return jsonify({
                 'status': 'success',
                 'success': True,
-                'username': acct.username,
-                'email': acct.email,
+                'username': str(username),
+                'email': str(email),
                 'user_count': len(users)
             })
         finally:
