@@ -5,6 +5,7 @@ Runs alongside the daemon with a web dashboard on port 8080
 """
 import os
 import json
+import sys
 import threading
 import time
 import uuid
@@ -17,6 +18,13 @@ from flask import Flask, render_template, jsonify, request, send_from_directory,
 from flask_socketio import SocketIO, emit
 import secrets
 from plexapi.myplex import MyPlexAccount
+
+# Ensure UTF-8 encoding for stdout to handle Unicode characters
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass  # Already UTF-8 or not supported
 
 # Import daemon module
 import daemon

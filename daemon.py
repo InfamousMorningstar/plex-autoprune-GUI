@@ -1,8 +1,12 @@
 import os, time, json, signal, threading, smtplib, requests, math, random
 import traceback
+import sys
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
+# Ensure UTF-8 encoding for stdout to handle Unicode characters
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 def log(msg):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
