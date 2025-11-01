@@ -21,6 +21,9 @@ from plexapi.myplex import MyPlexAccount
 # Import daemon module
 import daemon
 
+# File lock for VIP operations to prevent race conditions
+vip_lock = threading.Lock()
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -613,42 +616,44 @@ def api_user_reset(user_id):
 @api_login_required
 def api_user_toggle_vip(user_id):
     """Add or remove user from VIP list"""
-    try:
-        users = daemon.plex_get_users()
-        user = next((u for u in users if str(u['id']) == user_id), None)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        # Use username if available, otherwise use email as identifier
-        identifier = user.get('username') or user.get('email')
-        
-        if not identifier:
-            return jsonify({'error': 'User has no username or email'}), 404
-        
-        # Normalize to lowercase for case-insensitive matching
-        identifier = identifier.lower()
-        
-        config = get_env_config()
-        vip_names = [n.strip().lower() for n in config['VIP_NAMES'].split(',') if n.strip()]
-        
-        if identifier in vip_names:
-            vip_names.remove(identifier)
-            action = "removed from"
-        else:
-            vip_names.append(identifier)
-            action = "added to"
-        
-        config['VIP_NAMES'] = ','.join(vip_names)
-        save_env_config(config)
-        
-        # Reload daemon environment so VIP changes take effect immediately
-        daemon.load_env_file(CONFIG_FILE)
-        
-        web_log(f"User {identifier} {action} VIP list", "INFO")
-        return jsonify({'success': True, 'is_vip': identifier in vip_names})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    # Use threading lock to prevent race conditions during bulk operations
+    with vip_lock:
+        try:
+            users = daemon.plex_get_users()
+            user = next((u for u in users if str(u['id']) == user_id), None)
+            
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            # Use username if available, otherwise use email as identifier
+            identifier = user.get('username') or user.get('email')
+            
+            if not identifier:
+                return jsonify({'error': 'User has no username or email'}), 404
+            
+            # Normalize to lowercase for case-insensitive matching
+            identifier = identifier.lower()
+            
+            # CRITICAL: Reload from file first to get latest VIP list (avoid race conditions)
+            daemon.load_env_file(CONFIG_FILE)
+            
+            config = get_env_config()
+            vip_names = [n.strip().lower() for n in config['VIP_NAMES'].split(',') if n.strip()]
+            
+            if identifier in vip_names:
+                vip_names.remove(identifier)
+                action = "removed from"
+            else:
+                vip_names.append(identifier)
+                action = "added to"
+            
+            config['VIP_NAMES'] = ','.join(vip_names)
+            save_env_config(config)
+            
+            web_log(f"User {identifier} {action} VIP list", "INFO")
+            return jsonify({'success': True, 'is_vip': identifier in vip_names})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/api/test/email', methods=['POST'])
 def api_test_email():
