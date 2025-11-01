@@ -442,7 +442,8 @@ def api_users():
         
         for user in plex_users:
             uid = str(user['id'])
-            username = (user['username'] or '').lower()
+            username = (user.get('username') or '').lower()
+            email = (user.get('email') or '').lower()
             
             # Determine user status
             if uid in removed:
@@ -458,8 +459,8 @@ def api_users():
                 status = 'new'
                 badge_class = 'info'
             
-            # Check VIP status
-            is_vip = username in vip_names
+            # Check VIP status - match by username OR email (for pending invites)
+            is_vip = username in vip_names or email in vip_names
             
             # Get last activity
             last_watch = None
@@ -616,18 +617,26 @@ def api_user_toggle_vip(user_id):
         users = daemon.plex_get_users()
         user = next((u for u in users if str(u['id']) == user_id), None)
         
-        if not user or not user['username']:
-            return jsonify({'error': 'User not found or has no username'}), 404
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Use username if available, otherwise use email as identifier
+        identifier = user.get('username') or user.get('email')
+        
+        if not identifier:
+            return jsonify({'error': 'User has no username or email'}), 404
+        
+        # Normalize to lowercase for case-insensitive matching
+        identifier = identifier.lower()
         
         config = get_env_config()
-        vip_names = [n.strip() for n in config['VIP_NAMES'].split(',') if n.strip()]
-        username = user['username']
+        vip_names = [n.strip().lower() for n in config['VIP_NAMES'].split(',') if n.strip()]
         
-        if username in vip_names:
-            vip_names.remove(username)
+        if identifier in vip_names:
+            vip_names.remove(identifier)
             action = "removed from"
         else:
-            vip_names.append(username)
+            vip_names.append(identifier)
             action = "added to"
         
         config['VIP_NAMES'] = ','.join(vip_names)
@@ -636,8 +645,8 @@ def api_user_toggle_vip(user_id):
         # Reload daemon environment so VIP changes take effect immediately
         daemon.load_env_file(CONFIG_FILE)
         
-        web_log(f"User {username} {action} VIP list", "INFO")
-        return jsonify({'success': True, 'is_vip': username in vip_names})
+        web_log(f"User {identifier} {action} VIP list", "INFO")
+        return jsonify({'success': True, 'is_vip': identifier in vip_names})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
