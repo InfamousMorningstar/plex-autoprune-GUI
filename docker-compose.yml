@@ -1,23 +1,27 @@
 # =============================================================================
-# Plex-Auto-Prune GUI - Docker Compose Configuration
+# Plex Auto-Prune - One-Click Deploy
 # =============================================================================
-# ⚠️  WARNING: BETA SOFTWARE - FOR TESTING ONLY
-# 
-# This application is in early beta and NOT ready for production use.
-# ALWAYS start with DRY_RUN=true and test thoroughly before going live.
-# 
-# Known issues and incomplete features - use at your own risk!
-# Report bugs: https://github.com/InfamousMorningstar/plex-autoprune-GUI/issues
+# Just run: docker-compose up -d
+# Then open: http://localhost:5000
+# Login with Plex and you're done!
 # =============================================================================
 
 services:
   plex-auto-prune-gui:
     build: .
+    image: plex-auto-prune:latest
     container_name: plex-auto-prune-gui
     restart: unless-stopped
     ports:
-      - "8080:8080"  # Web UI port - can be changed (e.g., "9090:8080" for external port 9090)
+      - "5000:5000"
     volumes:
       - ./state:/app/state
-      - ./.env:/app/.env  # Mount .env file so setup wizard changes persist
-      - ./email_templates:/app/email_templates  # Optional: Custom email templates
+      - ./email_templates:/app/email_templates
+    environment:
+      - TZ=America/New_York  # Change to your timezone
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

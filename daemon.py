@@ -1,11 +1,85 @@
 import os, time, json, signal, threading, smtplib, requests, math, random
 import traceback
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 
 
 def log(msg):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
+
+
+# ==================== ERROR HANDLING & RETRY LOGIC ====================
+
+def retry_on_failure(max_retries=3, delay=2, backoff=2, exceptions=(Exception,)):
+    """
+    Decorator to retry a function on failure with exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        delay: Initial delay between retries in seconds
+        backoff: Multiplier for delay on each retry
+        exceptions: Tuple of exceptions to catch and retry
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            current_delay = delay
+            last_exception = None
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        log(f"[RETRY] {func.__name__} failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                        log(f"[RETRY] Waiting {current_delay}s before retry...")
+                        time.sleep(current_delay)
+                        current_delay *= backoff
+                    else:
+                        log(f"[ERROR] {func.__name__} failed after {max_retries} retries: {str(e)}")
+            
+            raise last_exception
+        return wrapper
+    return decorator
+
+
+def safe_request(url, method='GET', timeout=10, **kwargs):
+    """
+    Safe HTTP request wrapper with timeout and error handling.
+    
+    Args:
+        url: URL to request
+        method: HTTP method (GET, POST, etc.)
+        timeout: Request timeout in seconds
+        **kwargs: Additional arguments for requests
+    
+    Returns:
+        Response object or None on failure
+    """
+    try:
+        if method.upper() == 'GET':
+            response = requests.get(url, timeout=timeout, **kwargs)
+        elif method.upper() == 'POST':
+            response = requests.post(url, timeout=timeout, **kwargs)
+        else:
+            response = requests.request(method, url, timeout=timeout, **kwargs)
+        
+        response.raise_for_status()
+        return response
+    except requests.exceptions.Timeout:
+        log(f"[ERROR] Request timeout after {timeout}s: {url}")
+        return None
+    except requests.exceptions.ConnectionError:
+        log(f"[ERROR] Connection failed: {url}")
+        return None
+    except requests.exceptions.HTTPError as e:
+        log(f"[ERROR] HTTP error {e.response.status_code}: {url}")
+        return None
+    except Exception as e:
+        log(f"[ERROR] Request failed: {str(e)}")
+        return None
 
 from email.mime.text import MIMEText
 from dateutil import parser as dtp
@@ -41,28 +115,19 @@ def load_env_file(filepath="/app/.env"):
 # Load .env file before checking required vars
 load_env_file()
 
+# Make all environment variables optional with sensible defaults
+# Config will be done through web UI setup wizard
+PLEX_TOKEN       = os.environ.get("PLEX_TOKEN", "")
+PLEX_SERVER_NAME = os.environ.get("PLEX_SERVER_NAME", "")
+TAUTULLI_URL     = os.environ.get("TAUTULLI_URL", "").rstrip("/")
+TAUTULLI_API_KEY = os.environ.get("TAUTULLI_API_KEY", "")
 
-REQUIRED_ENVS = [
-    "PLEX_TOKEN","TAUTULLI_URL","TAUTULLI_API_KEY",
-    "SMTP_HOST","SMTP_PORT","SMTP_USERNAME","SMTP_PASSWORD","SMTP_FROM","ADMIN_EMAIL"
-]
-missing = [k for k in REQUIRED_ENVS if not os.environ.get(k)]
-if missing:
-    raise SystemExit(f"Missing required env(s): {', '.join(missing)}")
-
-
-# ---- Config via env ----
-PLEX_TOKEN       = os.environ["PLEX_TOKEN"]
-PLEX_SERVER_NAME = os.environ.get("PLEX_SERVER_NAME","")
-TAUTULLI_URL     = os.environ["TAUTULLI_URL"].rstrip("/")
-TAUTULLI_API_KEY = os.environ["TAUTULLI_API_KEY"]
-
-SMTP_HOST        = os.environ["SMTP_HOST"]
-SMTP_PORT        = int(os.environ.get("SMTP_PORT","587"))
-SMTP_USERNAME    = os.environ["SMTP_USERNAME"]
-SMTP_PASSWORD    = os.environ["SMTP_PASSWORD"]
-SMTP_FROM        = os.environ["SMTP_FROM"]
-ADMIN_EMAIL      = os.environ["ADMIN_EMAIL"]
+SMTP_HOST        = os.environ.get("SMTP_HOST", "")
+SMTP_PORT        = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USERNAME    = os.environ.get("SMTP_USERNAME", "")
+SMTP_PASSWORD    = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM        = os.environ.get("SMTP_FROM", "")
+ADMIN_EMAIL      = os.environ.get("ADMIN_EMAIL", "")
 
 WARN_DAYS        = int(os.environ.get("WARN_DAYS","27"))
 KICK_DAYS        = int(os.environ.get("KICK_DAYS","30"))
@@ -76,18 +141,44 @@ CHECK_INACTIVITY_SECS  = int(os.environ.get("CHECK_INACTIVITY_SECS","1800"))
 
 # VIP protection - these users are protected from auto-removal
 VIP_EMAILS = [ADMIN_EMAIL.lower()]  # Admin is always VIP
-# Add additional VIP usernames from environment variable (comma-separated)
-VIP_NAMES_STR = os.environ.get("VIP_NAMES", "")
-VIP_NAMES = [name.strip().lower() for name in VIP_NAMES_STR.split(",") if name.strip()]
+
+def get_vip_names():
+    """Get current VIP names from environment (reloads on each call)"""
+    vip_names_str = os.environ.get("VIP_NAMES", "")
+    return [name.strip().lower() for name in vip_names_str.split(",") if name.strip()]
 
 # Dry run mode - when enabled, no actual removals or emails are sent
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() in ("true", "1", "yes")
 
 STATE_DIR  = "/app/state"
 STATE_FILE = f"{STATE_DIR}/state.json"
+DAEMON_CONTROL_FILE = f"{STATE_DIR}/daemon_control.json"
 os.makedirs(STATE_DIR, exist_ok=True)
 
 stop_event = threading.Event()
+daemon_enabled = False  # Daemon starts disabled by default
+
+def load_daemon_control():
+    """Load daemon control state (enabled/disabled)"""
+    if os.path.exists(DAEMON_CONTROL_FILE):
+        try:
+            with open(DAEMON_CONTROL_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get('enabled', False)
+        except:
+            pass
+    return False
+
+def save_daemon_control(enabled):
+    """Save daemon control state"""
+    global daemon_enabled
+    daemon_enabled = enabled
+    with open(DAEMON_CONTROL_FILE, 'w') as f:
+        json.dump({'enabled': enabled, 'updated_at': datetime.now(timezone.utc).isoformat()}, f, indent=2)
+    log(f"[DAEMON] Monitoring {'ENABLED' if enabled else 'DISABLED'}")
+
+# Initialize daemon state from file
+daemon_enabled = load_daemon_control()
 
 from plexapi.myplex import MyPlexAccount
 import time
@@ -174,9 +265,22 @@ def test_discord_notifications():
 
 def load_state():
     if not os.path.exists(STATE_FILE):
-        return {"welcomed": {}, "warned": {}, "removed": {}, "last_inactivity_scan": None}
+        return {
+            "welcomed": {}, 
+            "warned": {}, 
+            "removed": {}, 
+            "last_inactivity_scan": None,
+            "email_history": [],  # Track all emails sent
+            "first_run_complete": False  # Flag for first-run setup
+        }
     with open(STATE_FILE,"r") as f:
-        return json.load(f)
+        state = json.load(f)
+        # Ensure new fields exist for backwards compatibility
+        if "email_history" not in state:
+            state["email_history"] = []
+        if "first_run_complete" not in state:
+            state["first_run_complete"] = False
+        return state
 
 def save_state(state):
     tmp = STATE_FILE + ".tmp"
@@ -184,15 +288,63 @@ def save_state(state):
         json.dump(state, f, indent=2, sort_keys=True)
     os.replace(tmp, STATE_FILE)
 
+@retry_on_failure(max_retries=3, delay=3, exceptions=(smtplib.SMTPException, OSError))
 def send_email(to_addr, subject, html_body):
-    msg = MIMEText(html_body, "html")
-    msg["Subject"] = subject
-    msg["From"] = os.environ.get("SMTP_FROM", SMTP_FROM)
-    msg["To"] = to_addr
-    with smtplib.SMTP(os.environ.get("SMTP_HOST", SMTP_HOST), int(os.environ.get("SMTP_PORT", SMTP_PORT))) as s:
-        s.starttls()
-        s.login(os.environ.get("SMTP_USERNAME", SMTP_USERNAME), os.environ.get("SMTP_PASSWORD", SMTP_PASSWORD))
-        s.sendmail(os.environ.get("SMTP_FROM", SMTP_FROM), [to_addr], msg.as_string())
+    """Send email with retry logic and error handling"""
+    try:
+        msg = MIMEText(html_body, "html")
+        msg["Subject"] = subject
+        msg["From"] = os.environ.get("SMTP_FROM", SMTP_FROM)
+        msg["To"] = to_addr
+        
+        smtp_host = os.environ.get("SMTP_HOST", SMTP_HOST)
+        smtp_port = int(os.environ.get("SMTP_PORT", SMTP_PORT))
+        
+        # Add timeout to SMTP connection
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as s:
+            s.starttls()
+            s.login(os.environ.get("SMTP_USERNAME", SMTP_USERNAME), os.environ.get("SMTP_PASSWORD", SMTP_PASSWORD))
+            s.sendmail(os.environ.get("SMTP_FROM", SMTP_FROM), [to_addr], msg.as_string())
+        
+        # Log successful email send
+        log_email_sent(to_addr, subject, "success")
+        log(f"[SUCCESS] Email sent: {subject} → {to_addr}")
+    except smtplib.SMTPAuthenticationError as e:
+        # Authentication errors won't be fixed by retrying
+        error_msg = f"SMTP authentication failed: {str(e)}"
+        log_email_sent(to_addr, subject, "failed", error_msg)
+        log(f"[ERROR] {error_msg}")
+        raise
+    except smtplib.SMTPException as e:
+        # Other SMTP errors might be temporary
+        error_msg = f"SMTP error: {str(e)}"
+        log_email_sent(to_addr, subject, "failed", error_msg)
+        log(f"[ERROR] Email send failed: {subject} → {to_addr}: {error_msg}")
+        raise
+    except Exception as e:
+        # Log unexpected errors
+        error_msg = f"Unexpected error: {str(e)}"
+        log_email_sent(to_addr, subject, "failed", error_msg)
+        log(f"[ERROR] Email send failed: {subject} → {to_addr}: {error_msg}")
+        raise
+
+def log_email_sent(to_addr, subject, status="success", error_msg=None):
+    """Log email send attempt to history"""
+    state = load_state()
+    email_log = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "to": to_addr,
+        "subject": subject,
+        "status": status,
+        "error": error_msg
+    }
+    state["email_history"].append(email_log)
+    
+    # Keep only last 500 emails to prevent unbounded growth
+    if len(state["email_history"]) > 500:
+        state["email_history"] = state["email_history"][-500:]
+    
+    save_state(state)
 
 def plex_headers():
     return {
@@ -201,10 +353,14 @@ def plex_headers():
         "X-Plex-Client-Identifier": "centauri-autoprune",
     }
 
+@retry_on_failure(max_retries=3, delay=2, exceptions=(requests.exceptions.RequestException,))
 def plex_get_users():
+    """Get all Plex users with retry logic"""
     # https://plex.tv/api/users
-    r = requests.get("https://plex.tv/api/users", headers=plex_headers(), timeout=30)
-    r.raise_for_status()
+    r = safe_request("https://plex.tv/api/users", headers=plex_headers())
+    if r is None:
+        raise RuntimeError("Failed to connect to Plex API")
+    
     from xml.etree import ElementTree as ET
     root = ET.fromstring(r.text)
     users = []
@@ -221,10 +377,14 @@ def plex_get_users():
         })
     return users
 
+@retry_on_failure(max_retries=3, delay=2, exceptions=(requests.exceptions.RequestException, RuntimeError))
 def plex_machine_id():
+    """Find Plex server machineIdentifier with retry logic"""
     # find our server machineIdentifier
-    sr = requests.get("https://plex.tv/api/servers", headers=plex_headers(), timeout=30)
-    sr.raise_for_status()
+    sr = safe_request("https://plex.tv/api/servers", headers=plex_headers())
+    if sr is None:
+        raise RuntimeError("Failed to connect to Plex API")
+    
     from xml.etree import ElementTree as ET
     root = ET.fromstring(sr.text)
     # If server name not specified, pick the first claimed
@@ -237,11 +397,15 @@ def plex_machine_id():
         raise RuntimeError("Could not find Plex server machineIdentifier; check PLEX_SERVER_NAME.")
     return cand
 
+@retry_on_failure(max_retries=3, delay=2, exceptions=(requests.exceptions.RequestException,))
 def plex_shared_map(machine_id):
+    """Get shared server mapping with retry logic"""
     # https://plex.tv/api/servers/<machineIdentifier>/shared_servers
     url = f"https://plex.tv/api/servers/{machine_id}/shared_servers"
-    rr = requests.get(url, headers=plex_headers(), timeout=30)
-    rr.raise_for_status()
+    rr = safe_request(url, headers=plex_headers())
+    if rr is None:
+        raise RuntimeError(f"Failed to get shared servers for machine {machine_id}")
+    
     from xml.etree import ElementTree as ET
     root = ET.fromstring(rr.text)
     m = {}
@@ -252,17 +416,61 @@ def plex_shared_map(machine_id):
             m[uid] = shared_id
     return m
 
+@retry_on_failure(max_retries=2, delay=1, exceptions=(requests.exceptions.RequestException,))
 def plex_remove_user(user_id, shared_id_map):
+    """Remove user from Plex with retry logic"""
     # try DELETE /api/friends/<id>, fallback to /api/shared_servers/<id>
     url = f"https://plex.tv/api/friends/{user_id}"
-    r = requests.delete(url, headers=plex_headers(), timeout=30)
-    if r.status_code in (200,204):
+    r = safe_request(url, method='DELETE', headers=plex_headers())
+    if r and r.status_code in (200,204):
         return True
     sid = shared_id_map.get(user_id)
     if sid:
-        r = requests.delete(f"https://plex.tv/api/shared_servers/{sid}", headers=plex_headers(), timeout=30)
-        return r.status_code in (200,204)
+        r = safe_request(f"https://plex.tv/api/shared_servers/{sid}", method='DELETE', headers=plex_headers())
+        return r and r.status_code in (200,204)
     return False
+
+def import_existing_users_as_welcomed():
+    """
+    Import all current Plex users and mark them as already welcomed.
+    This prevents sending welcome emails to existing users during first setup.
+    Returns count of imported users.
+    """
+    try:
+        log("Importing existing Plex users as already welcomed...")
+        users = plex_get_users()
+        state = load_state()
+        
+        imported_count = 0
+        for user in users:
+            user_id = user.get("id")
+            email = user.get("email", "").lower().strip()
+            username = user.get("title", "Unknown")
+            
+            # Skip if already welcomed
+            if user_id in state["welcomed"]:
+                continue
+            
+            # Mark as welcomed with import timestamp
+            state["welcomed"][user_id] = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "email": email,
+                "username": username,
+                "imported": True  # Flag to indicate this was an import, not actual welcome
+            }
+            imported_count += 1
+            log(f"Imported existing user: {username} ({email})")
+        
+        # Mark first run as complete
+        state["first_run_complete"] = True
+        save_state(state)
+        
+        log(f"Successfully imported {imported_count} existing users as welcomed")
+        return imported_count
+    except Exception as e:
+        log(f"Error importing existing users: {e}")
+        traceback.print_exc()
+        return 0
 
 def remove_friend(acct, user_id):
     """Remove a user from Plex server access"""
@@ -277,27 +485,43 @@ def remove_friend(acct, user_id):
         log(f"[remove_friend] error removing user {user_id}: {e}")
         return False
 
+@retry_on_failure(max_retries=3, delay=2, exceptions=(requests.exceptions.RequestException, RuntimeError))
 def tautulli(cmd, **params):
+    """Call Tautulli API with retry logic and error handling"""
     payload = {"apikey": os.environ.get("TAUTULLI_API_KEY", TAUTULLI_API_KEY), "cmd": cmd, **params}
-    r = requests.get(f"{os.environ.get('TAUTULLI_URL', TAUTULLI_URL)}/api/v2", params=payload, timeout=30)
-    r.raise_for_status()
+    url = f"{os.environ.get('TAUTULLI_URL', TAUTULLI_URL)}/api/v2"
+    
+    r = safe_request(url, params=payload)
+    if r is None:
+        raise RuntimeError(f"Failed to connect to Tautulli at {url}")
+    
     j = r.json()
     if j.get("response",{}).get("result") != "success":
         raise RuntimeError(f"Tautulli API error: {j}")
     return j["response"]["data"]
 
 def tautulli_users():
-    return tautulli("get_users")
+    """Get all Plex users from Tautulli with error handling"""
+    try:
+        return tautulli("get_users")
+    except Exception as e:
+        log(f"[ERROR] Failed to fetch users from Tautulli: {str(e)}")
+        return []
 
 def tautulli_last_watch(user_id):
-    hist = tautulli("get_history", user_id=user_id, length=1, order_column="date", order_dir="desc")
-    records = hist.get("data",[])
-    if not records:
+    """Get last watch time for a user with error handling"""
+    try:
+        hist = tautulli("get_history", user_id=user_id, length=1, order_column="date", order_dir="desc")
+        records = hist.get("data",[])
+        if not records:
+            return None
+        ts = records[0].get("date")
+        if ts is None:
+            return None
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc)
+    except Exception as e:
+        log(f"[ERROR] Failed to get last watch time for user {user_id}: {str(e)}")
         return None
-    ts = records[0].get("date")
-    if ts is None:
-        return None
-    return datetime.fromtimestamp(int(ts), tz=timezone.utc)
 
 # ---- Email templates ----
 # ---------- Email Template Configuration ----------
@@ -994,6 +1218,12 @@ def fast_join_watcher():
     removed = state.get("removed", {})
     tick = 0
     while not stop_event.is_set():
+        # Check if daemon is enabled
+        if not daemon_enabled:
+            log("[join] Daemon disabled, waiting...")
+            time.sleep(10)  # Check every 10 seconds
+            continue
+        
         tick += 1
         try:
             log(f"[join] tick {tick} – checking new users…")
@@ -1121,6 +1351,12 @@ def slow_inactivity_watcher():
     tick = 0
 
     while not stop_event.is_set():
+        # Check if daemon is enabled
+        if not daemon_enabled:
+            log("[inactive] Daemon disabled, waiting...")
+            time.sleep(10)  # Check every 10 seconds
+            continue
+        
         tick += 1
         try:
             log(f"[inactive] tick {tick} – scanning users…")
@@ -1178,7 +1414,7 @@ def slow_inactivity_watcher():
                 username = (pu["username"] or "").lower()
 
                 # Check VIP protection (email or username)
-                if (email or "").lower() in VIP_EMAILS or username in VIP_NAMES:
+                if (email or "").lower() in VIP_EMAILS or username in get_vip_names():
                     log(f"[inactive] skip VIP: {display} ({email or 'no-email'})")
                     continue
 

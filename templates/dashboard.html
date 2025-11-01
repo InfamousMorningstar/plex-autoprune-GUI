@@ -3,90 +3,130 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<h1 style="color: var(--centauri-cyan); margin-bottom: 2rem;">Dashboard</h1>
+<!-- Page Header -->
+<div style="margin-bottom: 24px;">
+    <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 4px;">$ guardian status --verbose</div>
+    <h1 style="color: var(--brand-cyan); font-size: 20px; font-weight: normal; margin: 0;">System Dashboard</h1>
+</div>
+
+<!-- DRY_RUN Mode Banner -->
+<div id="dryRunBanner" style="display: none; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.1)); border: 2px solid var(--brand-warning); border-radius: 6px; padding: 16px; margin-bottom: 20px; position: relative; overflow: hidden;">
+    <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--brand-warning), transparent); animation: scan 2s linear infinite;"></div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="font-size: 24px;">⚠️</div>
+        <div style="flex: 1;">
+            <div style="color: var(--brand-warning); font-weight: 600; font-size: 14px; margin-bottom: 4px;">DRY RUN MODE ACTIVE</div>
+            <div style="color: var(--text-muted); font-size: 12px;">System is in testing mode. No users will be warned or removed. Email notifications are disabled.</div>
+        </div>
+        <div style="background: rgba(245, 158, 11, 0.2); padding: 6px 12px; border-radius: 4px; font-size: 11px; color: var(--brand-warning); font-weight: 600;">TEST MODE</div>
+    </div>
+</div>
 
 <!-- Status Cards -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-    <div class="card">
-        <div style="display: flex; justify-content: between; align-items: center;">
-            <div>
-                <div style="color: var(--text-secondary); font-size: 0.9rem;">Total Users</div>
-                <div id="totalUsers" style="font-size: 2.5rem; color: var(--centauri-cyan); font-weight: bold;">--</div>
-            </div>
-            <div style="font-size: 3rem; opacity: 0.2;">👥</div>
-        </div>
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Users</div>
+        <div id="totalUsers" class="stat-value info">--</div>
+        <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">ALL_USERS</div>
     </div>
 
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <div style="color: var(--text-secondary); font-size: 0.9rem;">Active Users</div>
-                <div id="activeUsers" style="font-size: 2.5rem; color: var(--success); font-weight: bold;">--</div>
-            </div>
-            <div style="font-size: 3rem; opacity: 0.2;">✓</div>
-        </div>
+    <div class="stat-card">
+        <div class="stat-label">Active Users</div>
+        <div id="activeUsers" class="stat-value success">--</div>
+        <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">RECENTLY_ACTIVE</div>
     </div>
 
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <div style="color: var(--text-secondary); font-size: 0.9rem;">Warned Users</div>
-                <div id="warnedUsers" style="font-size: 2.5rem; color: var(--warning); font-weight: bold;">--</div>
-            </div>
-            <div style="font-size: 3rem; opacity: 0.2;">⚠</div>
-        </div>
+    <div class="stat-card">
+        <div class="stat-label">Warned Users</div>
+        <div id="warnedUsers" class="stat-value warning">--</div>
+        <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">PENDING_REMOVAL</div>
     </div>
 
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <div style="color: var(--text-secondary); font-size: 0.9rem;">Removed Users</div>
-                <div id="removedUsers" style="font-size: 2.5rem; color: var(--danger); font-weight: bold;">--</div>
-            </div>
-            <div style="font-size: 3rem; opacity: 0.2;">✗</div>
-        </div>
+    <div class="stat-card">
+        <div class="stat-label">Removed Users</div>
+        <div id="removedUsers" class="stat-value danger">--</div>
+        <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">PURGED</div>
     </div>
 </div>
 
 <!-- System Status & Settings -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
     <div class="card">
         <div class="card-header">
-            <h2 class="card-title">System Status</h2>
-            <span class="status-dot online"></span>
+            <h2 class="card-title">Daemon Control</h2>
+            <span class="status-dot" id="daemonIndicator"></span>
         </div>
-        <div style="display: grid; gap: 1rem;">
-            <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Daemon Status:</span>
-                <span id="daemonStatus" class="badge badge-success">Running</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Operating Mode:</span>
-                <span id="operatingMode" class="badge badge-warning">DRY RUN</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Last Check:</span>
-                <span id="lastCheck" style="color: var(--text-muted);">--</span>
+        <div class="card-body">
+            <div style="display: grid; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--term-border);">
+                    <span style="color: var(--text-muted); font-size: 11px;">STATUS</span>
+                    <span id="daemonStatus" class="badge badge-secondary">Checking...</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--term-border);">
+                    <span style="color: var(--text-muted); font-size: 11px;">MODE</span>
+                    <span id="operatingMode" class="badge badge-warning">DRY RUN</span>
+                </div>
+                <button id="daemonToggleBtn" class="btn btn-primary" style="width: 100%; margin-top: 8px;" onclick="toggleDaemon()" disabled>
+                    Loading...
+                </button>
+                <div id="daemonMessage" style="display: none; padding: 10px; border-radius: 4px; font-size: 11px; line-height: 1.5;"></div>
             </div>
         </div>
     </div>
 
     <div class="card">
         <div class="card-header">
-            <h2 class="card-title">Current Thresholds</h2>
+            <h2 class="card-title">Configuration</h2>
         </div>
-        <div style="display: grid; gap: 1rem;">
-            <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Warning After:</span>
-                <span id="warnThreshold" style="color: var(--warning);">-- days</span>
+        <div class="card-body">
+            <div style="display: grid; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--term-border);">
+                    <span style="color: var(--text-muted); font-size: 11px;">WARN_THRESHOLD</span>
+                    <span id="warnThreshold" style="color: var(--brand-warning); font-family: monospace;">-- days</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--term-border);">
+                    <span style="color: var(--text-muted); font-size: 11px;">KICK_THRESHOLD</span>
+                    <span id="kickThreshold" style="color: var(--brand-danger); font-family: monospace;">-- days</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                    <span style="color: var(--text-muted); font-size: 11px;">CHECK_INTERVAL</span>
+                    <span id="checkInterval" style="color: var(--text-secondary); font-family: monospace;">-- sec</span>
+                </div>
             </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Removal After:</span>
-                <span id="kickThreshold" style="color: var(--danger);">-- days</span>
+        </div>
+    </div>
+</div>
+
+<!-- Health Checks -->
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header">
+        <h2 class="card-title">Service Health</h2>
+        <button class="btn btn-secondary" style="padding: 4px 12px; font-size: 11px;" onclick="checkAllServices()">
+            <span id="refreshIcon">↻</span> Refresh
+        </button>
+    </div>
+    <div class="card-body">
+        <div style="display: grid; gap: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--term-border);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">🎬</span>
+                    <span style="color: var(--text-muted); font-size: 11px;">PLEX_SERVER</span>
+                </div>
+                <span id="plexHealth" class="badge badge-secondary">Checking...</span>
             </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Check Interval:</span>
-                <span id="checkInterval" style="color: var(--text-muted);">-- seconds</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--term-border);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">📊</span>
+                    <span style="color: var(--text-muted); font-size: 11px;">TAUTULLI</span>
+                </div>
+                <span id="tautulliHealth" class="badge badge-secondary">Checking...</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">📧</span>
+                    <span style="color: var(--text-muted); font-size: 11px;">EMAIL_SMTP</span>
+                </div>
+                <span id="emailHealth" class="badge badge-secondary">Checking...</span>
             </div>
         </div>
     </div>
@@ -96,10 +136,12 @@
 <div class="card">
     <div class="card-header">
         <h2 class="card-title">Recent Activity</h2>
-        <button class="btn btn-secondary" onclick="refreshLogs()">Refresh</button>
+        <button class="btn" onclick="refreshLogs()" style="font-size: 11px;">⟳ Refresh</button>
     </div>
-    <div id="recentActivity" style="max-height: 400px; overflow-y: auto;">
-        <div class="spinner"></div>
+    <div class="card-body">
+        <div id="recentActivity" class="terminal-output" style="max-height: 300px; overflow-y: auto; padding: 12px;">
+            <div style="color: var(--text-muted); text-align: center; padding: 20px;">Loading activity...</div>
+        </div>
     </div>
 </div>
 
@@ -108,46 +150,118 @@
     <div class="card-header">
         <h2 class="card-title">Quick Actions</h2>
     </div>
-    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-        <a href="/users" class="btn btn-primary">Manage Users</a>
-        <a href="/settings" class="btn btn-secondary">Settings</a>
-        <a href="/logs" class="btn btn-secondary">View Logs</a>
-        <button class="btn btn-secondary" onclick="toggleDryRun()">
-            <span id="dryRunToggle">Disable DRY RUN</span>
-        </button>
+    <div class="card-body">
+        <div class="btn-group">
+            <a href="/users" class="btn btn-primary">👤 Manage Users</a>
+            <a href="/settings" class="btn">⚙️ Settings</a>
+            <a href="/logs" class="btn">📋 View Logs</a>
+            <button class="btn btn-warning" onclick="toggleDryRun()">
+                <span id="dryRunToggle">Toggle DRY RUN</span>
+            </button>
+        </div>
     </div>
 </div>
 
 <style>
     .activity-item {
-        padding: 0.75rem;
-        border-left: 3px solid var(--border-color);
-        margin-bottom: 0.5rem;
-        background: var(--bg-tertiary);
-        border-radius: 4px;
+        padding: 8px 12px;
+        border-left: 2px solid var(--term-border);
+        margin-bottom: 6px;
+        background: var(--term-surface-2);
+        border-radius: 3px;
+        font-size: 12px;
+        line-height: 1.5;
     }
 
     .activity-item.success {
-        border-left-color: var(--success);
+        border-left-color: var(--brand-success);
     }
 
     .activity-item.warning {
-        border-left-color: var(--warning);
+        border-left-color: var(--brand-warning);
     }
 
     .activity-item.error {
-        border-left-color: var(--danger);
+        border-left-color: var(--brand-danger);
     }
 
     .activity-timestamp {
         color: var(--text-muted);
-        font-size: 0.85rem;
+        font-size: 10px;
+        font-family: monospace;
+    }
+    
+    @media (max-width: 768px) {
+        .stats-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 
 <script>
     let socket;
     let stats = {};
+    let daemonEnabled = false;
+
+    async function loadDaemonStatus() {
+        try {
+            const data = await API.get('/api/daemon/status');
+            daemonEnabled = data.enabled;
+            
+            const statusBadge = document.getElementById('daemonStatus');
+            const indicator = document.getElementById('daemonIndicator');
+            const toggleBtn = document.getElementById('daemonToggleBtn');
+            const message = document.getElementById('daemonMessage');
+            
+            if (daemonEnabled) {
+                statusBadge.textContent = '● Running';
+                statusBadge.className = 'badge badge-success';
+                indicator.className = 'status-dot online';
+                toggleBtn.textContent = '⏸ Stop Monitoring';
+                toggleBtn.className = 'btn btn-danger';
+                message.style.display = 'none';
+            } else {
+                statusBadge.textContent = '○ Stopped';
+                statusBadge.className = 'badge badge-secondary';
+                indicator.className = 'status-dot offline';
+                toggleBtn.textContent = '▶ Start Monitoring';
+                toggleBtn.className = 'btn btn-success';
+                message.style.display = 'block';
+                message.style.background = 'rgba(59, 130, 246, 0.1)';
+                message.style.borderLeft = '4px solid var(--info)';
+                message.style.color = 'var(--info)';
+                message.innerHTML = '<strong>ℹ️ Monitoring Paused:</strong> The daemon is waiting for you to start monitoring. Configure your settings and click "Start Monitoring" when ready.';
+            }
+            
+            toggleBtn.disabled = false;
+        } catch (error) {
+            console.error('Failed to load daemon status:', error);
+        }
+    }
+
+    async function toggleDaemon() {
+        const toggleBtn = document.getElementById('daemonToggleBtn');
+        toggleBtn.disabled = true;
+        
+        try {
+            const endpoint = daemonEnabled ? '/api/daemon/stop' : '/api/daemon/start';
+            const result = await API.post(endpoint);
+            
+            if (result.success) {
+                await loadDaemonStatus();
+                await loadStats();
+            }
+        } catch (error) {
+            alert('Failed to toggle daemon: ' + error.message);
+            toggleBtn.disabled = false;
+        }
+    }
 
     async function loadStats() {
         try {
@@ -238,12 +352,138 @@
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
+        loadDaemonStatus();
         loadStats();
         refreshLogs();
         connectWebSocket();
+        loadDryRunStatus();
+        checkAllServices();
         
         // Refresh stats every 30 seconds
-        setInterval(loadStats, 30000);
+        setInterval(() => {
+            loadDaemonStatus();
+            loadStats();
+        }, 30000);
+
+        // Refresh health checks every 60 seconds
+        setInterval(checkAllServices, 60000);
     });
+
+    // Health Check Functions
+    async function checkAllServices() {
+        const icon = document.getElementById('refreshIcon');
+        icon.style.animation = 'spin 1s linear';
+        setTimeout(() => { icon.style.animation = ''; }, 1000);
+        
+        checkPlexHealth();
+        checkTautulliHealth();
+        checkEmailHealth();
+    }
+
+    async function checkPlexHealth() {
+        const badge = document.getElementById('plexHealth');
+        badge.textContent = 'Checking...';
+        badge.className = 'badge badge-secondary';
+        
+        try {
+            const response = await fetch('/api/test/plex', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                badge.textContent = 'Connected';
+                badge.className = 'badge badge-success';
+            } else {
+                badge.textContent = 'Failed';
+                badge.className = 'badge badge-danger';
+            }
+        } catch (error) {
+            badge.textContent = 'Error';
+            badge.className = 'badge badge-danger';
+        }
+    }
+
+    async function checkTautulliHealth() {
+        const badge = document.getElementById('tautulliHealth');
+        badge.textContent = 'Checking...';
+        badge.className = 'badge badge-secondary';
+        
+        try {
+            const response = await fetch('/api/test/tautulli', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                badge.textContent = 'Connected';
+                badge.className = 'badge badge-success';
+            } else {
+                badge.textContent = 'Failed';
+                badge.className = 'badge badge-danger';
+            }
+        } catch (error) {
+            badge.textContent = 'Error';
+            badge.className = 'badge badge-danger';
+        }
+    }
+
+    async function checkEmailHealth() {
+        const badge = document.getElementById('emailHealth');
+        badge.textContent = 'Checking...';
+        badge.className = 'badge badge-secondary';
+        
+        try {
+            const response = await fetch('/api/test/email', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                badge.textContent = 'Connected';
+                badge.className = 'badge badge-success';
+            } else {
+                badge.textContent = 'Failed';
+                badge.className = 'badge badge-danger';
+            }
+        } catch (error) {
+            badge.textContent = 'Error';
+            badge.className = 'badge badge-danger';
+        }
+    }
+
+    // Load DRY_RUN status
+    async function loadDryRunStatus() {
+        try {
+            const response = await API.get('/api/settings');
+            const dryRunMode = response.DRY_RUN === 'true' || response.DRY_RUN === true;
+            const banner = document.getElementById('dryRunBanner');
+            if (dryRunMode) {
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Failed to load DRY_RUN status:', error);
+        }
+    }
 </script>
+
+<style>
+@keyframes scan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
 {% endblock %}

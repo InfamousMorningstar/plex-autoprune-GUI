@@ -1,0 +1,19 @@
+{
+  "version": "2",
+  "templates": [
+    {
+      "type": 3,
+      "title": "Plex Auto-Prune",
+      "name": "plex-auto-prune",
+      "description": "Automatically manage your Plex server users based on watch activity. Beautiful terminal-themed UI with Plex OAuth login.",
+      "logo": "https://raw.githubusercontent.com/InfamousMorningstar/plex-autoprune-GUI/master/static/logo.png",
+      "repository": {
+        "url": "https://github.com/InfamousMorningstar/plex-autoprune-GUI",
+        "stackfile": "docker-compose.yml"
+      },
+      "categories": ["Media", "Tools"],
+      "platform": "linux",
+      "note": "🎉 After deployment: <br/>1. Wait for build to complete<br/>2. Open http://your-server-ip:5000<br/>3. Login with Plex<br/>4. Complete the setup wizard<br/>5. That's it!<br/><br/>📖 First-time setup takes 2 minutes. All configuration is done through the web UI."
+    }
+  ]
+}

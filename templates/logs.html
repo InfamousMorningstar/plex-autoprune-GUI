@@ -3,26 +3,30 @@
 {% block title %}Logs{% endblock %}
 
 {% block content %}
-<h1 style="color: var(--centauri-cyan); margin-bottom: 2rem;">System Logs</h1>
+<!-- Page Header -->
+<div style="margin-bottom: 24px;">
+    <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 4px;">$ guardian logs --follow --level=all</div>
+    <h1 style="color: var(--brand-cyan); font-size: 20px; font-weight: normal; margin: 0;">System Logs</h1>
+</div>
 
 <!-- Controls -->
-<div class="card" style="margin-bottom: 1.5rem;">
-    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+<div class="card">
+    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 16px;">
         <!-- Filter Buttons -->
-        <div style="flex: 1; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <button class="btn btn-sm btn-primary active" data-level="ALL" onclick="filterLogs('ALL')">
-                All
+        <div style="flex: 1; display: flex; gap: 6px; flex-wrap: wrap;">
+            <button class="btn btn-sm" data-level="ALL" onclick="filterLogs('ALL')" style="background: var(--brand-primary);">
+                ALL
             </button>
-            <button class="btn btn-sm" data-level="INFO" onclick="filterLogs('INFO')" style="background: #3b82f6;">
+            <button class="btn btn-sm" data-level="INFO" onclick="filterLogs('INFO')" style="background: var(--brand-cyan);">
                 INFO
             </button>
-            <button class="btn btn-sm" data-level="SUCCESS" onclick="filterLogs('SUCCESS')" style="background: #10b981;">
+            <button class="btn btn-sm" data-level="SUCCESS" onclick="filterLogs('SUCCESS')" style="background: var(--brand-success);">
                 SUCCESS
             </button>
-            <button class="btn btn-sm" data-level="WARNING" onclick="filterLogs('WARNING')" style="background: #f59e0b;">
+            <button class="btn btn-sm" data-level="WARNING" onclick="filterLogs('WARNING')" style="background: var(--brand-warning);">
                 WARNING
             </button>
-            <button class="btn btn-sm" data-level="ERROR" onclick="filterLogs('ERROR')" style="background: #ef4444;">
+            <button class="btn btn-sm" data-level="ERROR" onclick="filterLogs('ERROR')" style="background: var(--brand-danger);">
                 ERROR
             </button>
         </div>
@@ -31,278 +35,275 @@
         <input 
             type="text" 
             id="logSearch" 
-            class="form-input" 
             placeholder="Search logs..." 
             style="max-width: 300px;"
             oninput="searchLogs()"
         >
 
         <!-- Auto-scroll Toggle -->
-        <label style="display: flex; align-items: center; gap: 0.5rem; margin: 0; cursor: pointer;">
-            <input type="checkbox" id="autoScroll" checked style="width: 18px; height: 18px;">
+        <label style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; color: var(--text-secondary); font-size: 12px;">
+            <input type="checkbox" id="autoScroll" checked style="width: 16px; height: 16px; cursor: pointer;">
             <span style="white-space: nowrap;">Auto-scroll</span>
         </label>
 
         <!-- Action Buttons -->
-        <button class="btn btn-secondary" onclick="exportLogs()">
-            📥 Export
-        </button>
-        <button class="btn btn-secondary" onclick="clearLogs()">
-            🗑️ Clear
-        </button>
+        <div class="btn-group">
+            <button class="btn" onclick="exportLogs()">↓ Export</button>
+            <button class="btn btn-danger" onclick="clearLogs()">✗ Clear</button>
+        </div>
     </div>
 </div>
 
 <!-- Log Viewer -->
 <div class="card" style="padding: 0;">
-    <div id="logContainer" style="
-        max-height: 600px;
-        overflow-y: auto;
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        background: #000;
-        padding: 1rem;
-        border-radius: 8px;
-    ">
+    <div class="terminal-output" id="logContainer" style="max-height: 500px; min-height: 300px;">
         <div id="logContent"></div>
-        <div id="logLoading" style="color: #6b7280; text-align: center; padding: 2rem;">
-            Loading logs...
+        <div id="logLoading" style="color: var(--text-muted); text-align: center; padding: 40px; font-size: 11px;">
+            > Loading logs...
         </div>
     </div>
 </div>
 
 <!-- Stats -->
-<div class="card" style="margin-top: 1.5rem;">
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; text-align: center;">
-        <div>
-            <div style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.25rem;">Total Logs</div>
-            <div style="font-size: 1.5rem; font-weight: bold; color: var(--centauri-cyan);" id="totalLogs">0</div>
-        </div>
-        <div>
-            <div style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.25rem;">INFO</div>
-            <div style="font-size: 1.5rem; font-weight: bold; color: #3b82f6;" id="infoCount">0</div>
-        </div>
-        <div>
-            <div style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.25rem;">SUCCESS</div>
-            <div style="font-size: 1.5rem; font-weight: bold; color: #10b981;" id="successCount">0</div>
-        </div>
-        <div>
-            <div style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.25rem;">WARNING</div>
-            <div style="font-size: 1.5rem; font-weight: bold; color: #f59e0b;" id="warningCount">0</div>
-        </div>
-        <div>
-            <div style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.25rem;">ERROR</div>
-            <div style="font-size: 1.5rem; font-weight: bold; color: #ef4444;" id="errorCount">0</div>
-        </div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-top: 24px;">
+    <div class="stat-card">
+        <div class="stat-label">TOTAL LOGS</div>
+        <div class="stat-value" id="totalLogs">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">INFO</div>
+        <div class="stat-value" style="color: var(--brand-cyan);" id="infoCount">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">SUCCESS</div>
+        <div class="stat-value" style="color: var(--brand-success);" id="successCount">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">WARNING</div>
+        <div class="stat-value" style="color: var(--brand-warning);" id="warningCount">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">ERROR</div>
+        <div class="stat-value" style="color: var(--brand-danger);" id="errorCount">0</div>
     </div>
 </div>
 
-<script>
-    let allLogs = [];
-    let filteredLogs = [];
-    let currentFilter = 'ALL';
-    let searchQuery = '';
-
-    const levelColors = {
-        'INFO': '#3b82f6',
-        'SUCCESS': '#10b981',
-        'WARNING': '#f59e0b',
-        'ERROR': '#ef4444',
-        'DEBUG': '#6b7280'
-    };
-
-    // Load initial logs
-    async function loadInitialLogs() {
-        try {
-            const response = await fetch('/api/logs');
-            const data = await response.json();
-            allLogs = data.logs || [];
-            applyFilters();
-            document.getElementById('logLoading').style.display = 'none';
-        } catch (error) {
-            console.error('Failed to load logs:', error);
-            document.getElementById('logLoading').innerHTML = 
-                '<span style="color: #ef4444;">Failed to load logs</span>';
-        }
-    }
-
-    // WebSocket for real-time logs
-    if (window.socket) {
-        socket.on('log', (log) => {
-            allLogs.push(log);
-            
-            // Limit to 1000 logs in memory
-            if (allLogs.length > 1000) {
-                allLogs.shift();
-            }
-            
-            applyFilters();
-        });
-    }
-
-    function applyFilters() {
-        // Filter by level
-        filteredLogs = allLogs;
-        
-        if (currentFilter !== 'ALL') {
-            filteredLogs = filteredLogs.filter(log => log.level === currentFilter);
-        }
-        
-        // Filter by search
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            filteredLogs = filteredLogs.filter(log => 
-                log.message.toLowerCase().includes(query) ||
-                (log.timestamp && log.timestamp.toLowerCase().includes(query))
-            );
-        }
-        
-        renderLogs();
-        updateStats();
-    }
-
-    function renderLogs() {
-        const container = document.getElementById('logContent');
-        const autoScroll = document.getElementById('autoScroll').checked;
-        const logContainer = document.getElementById('logContainer');
-        const wasAtBottom = logContainer.scrollHeight - logContainer.scrollTop <= logContainer.clientHeight + 50;
-        
-        container.innerHTML = filteredLogs.map(log => {
-            const color = levelColors[log.level] || '#6b7280';
-            const timestamp = log.timestamp || new Date().toISOString().replace('T', ' ').substring(0, 19);
-            
-            return `
-                <div style="
-                    margin-bottom: 0.5rem;
-                    padding: 0.5rem;
-                    border-left: 3px solid ${color};
-                    background: rgba(${hexToRgb(color)}, 0.1);
-                    border-radius: 4px;
-                ">
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                        <span style="color: #6b7280; font-size: 11px; white-space: nowrap;">${timestamp}</span>
-                        <span style="
-                            background: ${color};
-                            color: #000;
-                            padding: 2px 8px;
-                            border-radius: 4px;
-                            font-size: 11px;
-                            font-weight: bold;
-                            white-space: nowrap;
-                        ">${log.level}</span>
-                        <span style="color: #e5e7eb; flex: 1;">${escapeHtml(log.message)}</span>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        // Auto-scroll if enabled and was at bottom
-        if (autoScroll && wasAtBottom) {
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
-    }
-
-    function filterLogs(level) {
-        currentFilter = level;
-        
-        // Update button states
-        document.querySelectorAll('[data-level]').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.level === level);
-        });
-        
-        applyFilters();
-    }
-
-    function searchLogs() {
-        searchQuery = document.getElementById('logSearch').value;
-        applyFilters();
-    }
-
-    function updateStats() {
-        const counts = {
-            INFO: 0,
-            SUCCESS: 0,
-            WARNING: 0,
-            ERROR: 0
-        };
-        
-        allLogs.forEach(log => {
-            if (counts.hasOwnProperty(log.level)) {
-                counts[log.level]++;
-            }
-        });
-        
-        document.getElementById('totalLogs').textContent = allLogs.length;
-        document.getElementById('infoCount').textContent = counts.INFO;
-        document.getElementById('successCount').textContent = counts.SUCCESS;
-        document.getElementById('warningCount').textContent = counts.WARNING;
-        document.getElementById('errorCount').textContent = counts.ERROR;
-    }
-
-    function exportLogs() {
-        const text = filteredLogs.map(log => {
-            const timestamp = log.timestamp || new Date().toISOString();
-            return `[${timestamp}] [${log.level}] ${log.message}`;
-        }).join('\n');
-        
-        const blob = new Blob([text], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-    a.download = `plex-auto-prune-gui-logs-${new Date().toISOString().slice(0, 10)}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        showAlert('Logs exported successfully!', 'success');
-    }
-
-    function clearLogs() {
-        if (confirm('Clear all logs? This cannot be undone.')) {
-            allLogs = [];
-            applyFilters();
-            showAlert('Logs cleared', 'success');
-        }
-    }
-
-    function hexToRgb(hex) {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result 
-            ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-            : '107, 114, 128';
-    }
-
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    // Initialize
-    document.addEventListener('DOMContentLoaded', loadInitialLogs);
-</script>
-
 <style>
-    /* Custom scrollbar for log container */
-    #logContainer::-webkit-scrollbar {
-        width: 8px;
-    }
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 11px;
+    opacity: 0.7;
+    transition: opacity 0.15s, background 0.15s;
+}
 
-    #logContainer::-webkit-scrollbar-track {
-        background: #1a1a1a;
-    }
+.btn-sm:hover {
+    opacity: 1;
+}
 
-    #logContainer::-webkit-scrollbar-thumb {
-        background: var(--centauri-cyan);
-        border-radius: 4px;
-    }
+.btn-sm.active {
+    opacity: 1;
+    box-shadow: 0 0 0 2px rgba(122, 92, 255, 0.3);
+}
 
-    #logContainer::-webkit-scrollbar-thumb:hover {
-        background: var(--centauri-purple);
-    }
+.log-line {
+    padding: 4px 0;
+    font-size: 12px;
+    line-height: 1.6;
+    border-left: 2px solid transparent;
+    padding-left: 12px;
+    margin-left: -12px;
+    transition: background 0.1s;
+}
 
-    /* Button active state */
-    .btn.active {
-        box-shadow: 0 0 0 2px var(--centauri-cyan);
-    }
+.log-line:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.log-timestamp {
+    color: var(--text-muted);
+    margin-right: 12px;
+    font-size: 11px;
+}
+
+.log-level {
+    display: inline-block;
+    min-width: 70px;
+    margin-right: 12px;
+    font-weight: bold;
+    font-size: 10px;
+    text-align: center;
+    padding: 2px 6px;
+    border-radius: 2px;
+}
+
+.log-level-INFO { color: var(--brand-cyan); border-left-color: var(--brand-cyan); }
+.log-level-SUCCESS { color: var(--brand-success); border-left-color: var(--brand-success); }
+.log-level-WARNING { color: var(--brand-warning); border-left-color: var(--brand-warning); }
+.log-level-ERROR { color: var(--brand-danger); border-left-color: var(--brand-danger); }
+.log-level-DEBUG { color: var(--text-muted); border-left-color: var(--text-muted); }
+
+.log-message {
+    color: var(--text-primary);
+}
 </style>
+
+<script>
+let allLogs = [];
+let filteredLogs = [];
+let currentFilter = 'ALL';
+let searchQuery = '';
+
+// Load initial logs
+async function loadInitialLogs() {
+    try {
+        const response = await fetch('/api/logs');
+        const data = await response.json();
+        allLogs = data.logs || [];
+        applyFilters();
+        document.getElementById('logLoading').style.display = 'none';
+    } catch (error) {
+        console.error('Failed to load logs:', error);
+        document.getElementById('logLoading').innerHTML = 
+            '<span style="color: var(--brand-danger);">✗ Failed to load logs</span>';
+    }
+}
+
+// WebSocket for real-time logs
+if (window.socket) {
+    socket.on('log', (log) => {
+        allLogs.push(log);
+        
+        // Limit to 1000 logs in memory
+        if (allLogs.length > 1000) {
+            allLogs.shift();
+        }
+        
+        applyFilters();
+    });
+}
+
+function applyFilters() {
+    // Filter by level
+    filteredLogs = allLogs;
+    
+    if (currentFilter !== 'ALL') {
+        filteredLogs = filteredLogs.filter(log => log.level === currentFilter);
+    }
+    
+    // Filter by search
+    if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        filteredLogs = filteredLogs.filter(log => 
+            log.message.toLowerCase().includes(query) ||
+            (log.timestamp && log.timestamp.toLowerCase().includes(query))
+        );
+    }
+    
+    renderLogs();
+    updateStats();
+}
+
+function renderLogs() {
+    const container = document.getElementById('logContent');
+    const autoScroll = document.getElementById('autoScroll').checked;
+    const logContainer = document.getElementById('logContainer');
+    const wasAtBottom = logContainer.scrollHeight - logContainer.scrollTop <= logContainer.clientHeight + 50;
+    
+    if (filteredLogs.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 40px; font-size: 11px;">> No logs to display</div>';
+        return;
+    }
+    
+    container.innerHTML = filteredLogs.map(log => {
+        const timestamp = log.timestamp || new Date().toISOString().replace('T', ' ').substring(0, 19);
+        
+        return `
+            <div class="log-line log-level-${log.level}">
+                <span class="log-timestamp">${timestamp}</span>
+                <span class="log-level">${log.level}</span>
+                <span class="log-message">${escapeHtml(log.message)}</span>
+            </div>
+        `;
+    }).join('');
+    
+    // Auto-scroll if enabled and was at bottom
+    if (autoScroll && wasAtBottom) {
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+}
+
+function filterLogs(level) {
+    currentFilter = level;
+    
+    // Update button states
+    document.querySelectorAll('[data-level]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.level === level);
+    });
+    
+    applyFilters();
+}
+
+function searchLogs() {
+    searchQuery = document.getElementById('logSearch').value;
+    applyFilters();
+}
+
+function updateStats() {
+    const counts = {
+        INFO: 0,
+        SUCCESS: 0,
+        WARNING: 0,
+        ERROR: 0
+    };
+    
+    allLogs.forEach(log => {
+        if (counts.hasOwnProperty(log.level)) {
+            counts[log.level]++;
+        }
+    });
+    
+    document.getElementById('totalLogs').textContent = allLogs.length;
+    document.getElementById('infoCount').textContent = counts.INFO;
+    document.getElementById('successCount').textContent = counts.SUCCESS;
+    document.getElementById('warningCount').textContent = counts.WARNING;
+    document.getElementById('errorCount').textContent = counts.ERROR;
+}
+
+function exportLogs() {
+    const text = filteredLogs.map(log => {
+        const timestamp = log.timestamp || new Date().toISOString();
+        return `[${timestamp}] [${log.level}] ${log.message}`;
+    }).join('\n');
+    
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `guardian-logs-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showAlert('Logs exported successfully!', 'success');
+}
+
+function clearLogs() {
+    if (confirm('Clear all logs? This cannot be undone.')) {
+        allLogs = [];
+        applyFilters();
+        showAlert('Logs cleared', 'success');
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialize - set ALL filter as active by default
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelector('[data-level="ALL"]').classList.add('active');
+    loadInitialLogs();
+});
+</script>
 {% endblock %}

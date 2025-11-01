@@ -7,25 +7,96 @@ import os
 import json
 import threading
 import time
+import uuid
+import requests
+import smtplib
+import socket
 from datetime import datetime, timezone, timedelta
-from flask import Flask, render_template, jsonify, request, send_from_directory
+from functools import wraps
+from flask import Flask, render_template, jsonify, request, send_from_directory, session, redirect, url_for, send_file
 from flask_socketio import SocketIO, emit
 import secrets
+from plexapi.myplex import MyPlexAccount
 
 # Import daemon module
 import daemon
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+
+# PRODUCTION: Restrict CORS to localhost only (change to your domain in production)
+socketio = SocketIO(app, cors_allowed_origins=["http://localhost:8080", "http://127.0.0.1:8080"], async_mode='eventlet')
 
 # Configuration file path
 CONFIG_FILE = "/app/.env"
 SETUP_FLAG = "/app/state/.setup_complete"
+PLEX_AUTH_FILE = "/app/state/.plex_auth.json"
+
+# Plex OAuth Configuration
+PLEX_CLIENT_ID = "plex-auto-prune-gui"
+PLEX_PRODUCT = "Plex-Auto-Prune GUI"
 
 # In-memory log buffer for real-time streaming
 log_buffer = []
 MAX_LOG_BUFFER = 1000
+
+# Login decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('plex_token'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# API login decorator
+def api_login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('plex_token'):
+            return jsonify({'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+def save_plex_auth(token, username, email):
+    """Save Plex authentication data"""
+    auth_data = {
+        'token': token,
+        'username': username,
+        'email': email,
+        'authenticated_at': datetime.now(timezone.utc).isoformat()
+    }
+    os.makedirs(os.path.dirname(PLEX_AUTH_FILE), exist_ok=True)
+    with open(PLEX_AUTH_FILE, 'w') as f:
+        json.dump(auth_data, f, indent=2)
+    web_log(f"Plex authentication saved for {username}", "SUCCESS")
+
+def load_plex_auth():
+    """Load saved Plex authentication"""
+    if os.path.exists(PLEX_AUTH_FILE):
+        try:
+            with open(PLEX_AUTH_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            web_log(f"Failed to load Plex auth: {e}", "ERROR")
+    return None
+
+def verify_plex_token(token):
+    """Verify a Plex token is valid"""
+    try:
+        account = MyPlexAccount(token=token)
+        return {
+            'valid': True,
+            'username': account.username,
+            'email': account.email,
+            'thumb': account.thumb
+        }
+    except Exception as e:
+        web_log(f"Plex token verification failed: {e}", "ERROR")
+        return {'valid': False}
 
 def web_log(msg, level="INFO"):
     """Log message and broadcast to connected clients"""
@@ -85,34 +156,172 @@ def save_env_config(config):
 
 # ==================== ROUTES ====================
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page with Plex OAuth"""
+    # Check if already authenticated
+    if session.get('plex_token'):
+        return redirect(url_for('index'))
+    
+    # Handle PIN callback from Plex
+    if request.args.get('pinID'):
+        pin_id = request.args.get('pinID')
+        try:
+            # Check PIN status
+            pin_url = f"https://plex.tv/api/v2/pins/{pin_id}"
+            headers = {
+                'Accept': 'application/json',
+                'X-Plex-Client-Identifier': PLEX_CLIENT_ID
+            }
+            response = requests.get(pin_url, headers=headers)
+            data = response.json()
+            
+            if data.get('authToken'):
+                token = data['authToken']
+                
+                # Verify token and get user info
+                verification = verify_plex_token(token)
+                if verification['valid']:
+                    # Save to session
+                    session['plex_token'] = token
+                    session['plex_username'] = verification['username']
+                    session['plex_email'] = verification['email']
+                    session.permanent = True
+                    
+                    # Save authentication
+                    save_plex_auth(token, verification['username'], verification['email'])
+                    
+                    # Update environment with token
+                    os.environ['PLEX_TOKEN'] = token
+                    
+                    # Try to get server name and update .env
+                    try:
+                        account = MyPlexAccount(token=token)
+                        resources = account.resources()
+                        servers = [r for r in resources if r.provides == 'server']
+                        if servers:
+                            server_name = servers[0].name
+                            os.environ['PLEX_SERVER_NAME'] = server_name
+                            
+                            # Update .env file
+                            config = get_env_config()
+                            config['PLEX_TOKEN'] = token
+                            config['PLEX_SERVER_NAME'] = server_name
+                            save_env_config(config)
+                            
+                            web_log(f"Plex login successful: {verification['username']} - Server: {server_name}", "SUCCESS")
+                    except Exception as e:
+                        web_log(f"Could not fetch server info: {e}", "WARNING")
+                    
+                    return redirect(url_for('index'))
+                else:
+                    return render_template('login.html', error='Invalid Plex token')
+            else:
+                return render_template('login.html', error='Plex authentication pending')
+        except Exception as e:
+            web_log(f"Plex OAuth error: {e}", "ERROR")
+            return render_template('login.html', error=f'Authentication failed: {str(e)}')
+    
+    # Check if we have saved auth
+    saved_auth = load_plex_auth()
+    if saved_auth and saved_auth.get('token'):
+        verification = verify_plex_token(saved_auth['token'])
+        if verification['valid']:
+            session['plex_token'] = saved_auth['token']
+            session['plex_username'] = verification['username']
+            session['plex_email'] = verification['email']
+            session.permanent = True
+            return redirect(url_for('index'))
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    """Logout endpoint - clears session and saved auth"""
+    username = session.get('plex_username', 'User')
+    session.clear()
+    
+    # Delete saved auth file to force fresh login
+    if os.path.exists(PLEX_AUTH_FILE):
+        try:
+            os.remove(PLEX_AUTH_FILE)
+            web_log(f"{username} logged out (auth file deleted)", "INFO")
+        except Exception as e:
+            web_log(f"Failed to delete auth file: {e}", "ERROR")
+    else:
+        web_log(f"{username} logged out", "INFO")
+    
+    return redirect(url_for('login'))
+
 @app.route('/')
 def index():
-    """Main entry point - redirects to setup or dashboard"""
+    """Main entry point - smart routing based on setup status"""
+    # If setup not complete, go directly to setup wizard (no login required)
     if not is_setup_complete():
         return render_template('setup.html')
+    
+    # If setup complete but not logged in, redirect to login
+    if not session.get('plex_token'):
+        return redirect(url_for('login'))
+    
+    # All good - show dashboard
     return render_template('dashboard.html')
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
     """Main dashboard"""
     return render_template('dashboard.html')
 
 @app.route('/users')
+@login_required
 def users():
     """User management page"""
     return render_template('users.html')
 
 @app.route('/settings')
+@login_required
 def settings():
     """Settings configuration page"""
     return render_template('settings.html')
 
 @app.route('/logs')
+@login_required
 def logs_page():
     """Live logs viewer"""
     return render_template('logs.html')
 
+@app.route('/email-history')
+@login_required
+def email_history_page():
+    """Email send history viewer"""
+    return render_template('email_history.html')
+
 # ==================== API ENDPOINTS ====================
+
+@app.route('/api/plex/auth/pin', methods=['POST'])
+def create_plex_pin():
+    """Create a Plex authentication PIN"""
+    try:
+        pin_url = "https://plex.tv/api/v2/pins"
+        headers = {
+            'Accept': 'application/json',
+            'X-Plex-Client-Identifier': PLEX_CLIENT_ID,
+            'X-Plex-Product': PLEX_PRODUCT
+        }
+        data = {'strong': True}
+        
+        response = requests.post(pin_url, headers=headers, json=data)
+        pin_data = response.json()
+        
+        return jsonify({
+            'pin_id': pin_data['id'],
+            'code': pin_data['code'],
+            'auth_url': f"https://app.plex.tv/auth#!?clientID={PLEX_CLIENT_ID}&code={pin_data['code']}&context[device][product]={PLEX_PRODUCT}"
+        })
+    except Exception as e:
+        web_log(f"Failed to create Plex PIN: {e}", "ERROR")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/setup/complete', methods=['POST'])
 def api_setup_complete():
@@ -132,7 +341,23 @@ def api_setup_status():
     """Check if setup is complete"""
     return jsonify({'complete': is_setup_complete()})
 
+@app.route('/api/session/check', methods=['GET'])
+def api_session_check():
+    """Check if user is authenticated and return session info"""
+    if session.get('plex_token'):
+        # User is logged in via Plex OAuth
+        return jsonify({
+            'authenticated': True,
+            'plex_token': session.get('plex_token'),
+            'plex_username': session.get('plex_username'),
+            'plex_email': session.get('plex_email'),
+            'server_name': os.environ.get('PLEX_SERVER_NAME', '')
+        })
+    else:
+        return jsonify({'authenticated': False}), 401
+
 @app.route('/api/config', methods=['GET'])
+@api_login_required
 def api_get_config():
     """Get current configuration (masked sensitive values)"""
     config = get_env_config()
@@ -148,6 +373,7 @@ def api_get_config():
     return jsonify(config)
 
 @app.route('/api/config', methods=['POST'])
+@api_login_required
 def api_save_config():
     """Save configuration updates"""
     try:
@@ -167,6 +393,7 @@ def api_save_config():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/stats', methods=['GET'])
+@api_login_required
 def api_stats():
     """Get dashboard statistics"""
     try:
@@ -198,6 +425,7 @@ def api_stats():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users', methods=['GET'])
+@api_login_required
 def api_users():
     """Get list of all users with detailed status"""
     try:
@@ -207,8 +435,8 @@ def api_users():
         warned = state.get('warned', {})
         removed = state.get('removed', {})
         
-        vip_names = os.environ.get('VIP_NAMES', '').lower().split(',')
-        vip_names = [n.strip() for n in vip_names if n.strip()]
+        # Get current VIP names using daemon's dynamic function
+        vip_names = daemon.get_vip_names()
         
         users_data = []
         
@@ -268,6 +496,7 @@ def api_users():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<user_id>/welcome', methods=['POST'])
+@api_login_required
 def api_user_welcome(user_id):
     """Send welcome email to user"""
     try:
@@ -297,6 +526,7 @@ def api_user_welcome(user_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<user_id>/warn', methods=['POST'])
+@api_login_required
 def api_user_warn(user_id):
     """Send warning email to user"""
     try:
@@ -327,6 +557,7 @@ def api_user_warn(user_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<user_id>/remove', methods=['POST'])
+@api_login_required
 def api_user_remove(user_id):
     """Remove user from Plex"""
     try:
@@ -363,6 +594,7 @@ def api_user_remove(user_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<user_id>/reset', methods=['POST'])
+@api_login_required
 def api_user_reset(user_id):
     """Reset user state (clear warnings/removals)"""
     try:
@@ -377,6 +609,7 @@ def api_user_reset(user_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<user_id>/vip', methods=['POST'])
+@api_login_required
 def api_user_toggle_vip(user_id):
     """Add or remove user from VIP list"""
     try:
@@ -400,6 +633,9 @@ def api_user_toggle_vip(user_id):
         config['VIP_NAMES'] = ','.join(vip_names)
         save_env_config(config)
         
+        # Reload daemon environment so VIP changes take effect immediately
+        daemon.load_env_file(CONFIG_FILE)
+        
         web_log(f"User {username} {action} VIP list", "INFO")
         return jsonify({'success': True, 'is_vip': username in vip_names})
     except Exception as e:
@@ -407,7 +643,7 @@ def api_user_toggle_vip(user_id):
 
 @app.route('/api/test/email', methods=['POST'])
 def api_test_email():
-    """Send test email"""
+    """Send test email with improved error handling"""
     try:
         data = request.json or {}
         email = data.get('email') or data.get('ADMIN_EMAIL')
@@ -420,10 +656,10 @@ def api_test_email():
         smtp_from = data.get('SMTP_FROM') or data.get('smtp_from') or os.environ.get('SMTP_FROM')
         
         if not email:
-            return jsonify({'error': 'Email required'}), 400
+            return jsonify({'status': 'error', 'error': 'Email address required'}), 400
         
         if not all([smtp_host, smtp_port, smtp_username, smtp_password, smtp_from]):
-            return jsonify({'error': 'SMTP configuration required'}), 400
+            return jsonify({'status': 'error', 'error': 'Complete SMTP configuration required'}), 400
         
         # Temporarily set environment for test
         old_host = os.environ.get('SMTP_HOST')
@@ -441,7 +677,7 @@ def api_test_email():
         try:
             daemon.send_email(email, "Plex-Auto-Prune GUI Test Email", daemon.welcome_email_html("Test User"))
             web_log(f"Test email sent to {email}", "SUCCESS")
-            return jsonify({'success': True})
+            return jsonify({'status': 'success', 'success': True})
         finally:
             # Restore original environment
             for key, old_val in [('SMTP_HOST', old_host), ('SMTP_PORT', old_port), 
@@ -452,9 +688,22 @@ def api_test_email():
                 elif key in os.environ:
                     del os.environ[key]
                     
+    except smtplib.SMTPAuthenticationError as e:
+        error_msg = 'SMTP authentication failed. Check your username and password.'
+        web_log(f"Email test failed: {error_msg}", "ERROR")
+        return jsonify({'status': 'error', 'error': error_msg}), 500
+    except smtplib.SMTPConnectError as e:
+        error_msg = 'Cannot connect to SMTP server. Check host and port.'
+        web_log(f"Email test failed: {error_msg}", "ERROR")
+        return jsonify({'status': 'error', 'error': error_msg}), 500
+    except socket.timeout:
+        error_msg = 'SMTP connection timeout. Check your network and firewall settings.'
+        web_log(f"Email test failed: {error_msg}", "ERROR")
+        return jsonify({'status': 'error', 'error': error_msg}), 500
     except Exception as e:
-        web_log(f"Test email failed: {str(e)}", "ERROR")
-        return jsonify({'error': str(e)}), 500
+        error_msg = f'Email test failed: {str(e)}'
+        web_log(error_msg, "ERROR")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
 
 @app.route('/api/test/discord', methods=['POST'])
 def api_test_discord():
@@ -487,7 +736,7 @@ def api_test_discord():
 
 @app.route('/api/test/plex', methods=['POST'])
 def api_test_plex():
-    """Test Plex connection"""
+    """Test Plex connection with improved error handling"""
     try:
         # Get token from request body (for setup wizard) or environment
         data = request.json or {}
@@ -496,7 +745,7 @@ def api_test_plex():
         server_name = data.get('PLEX_SERVER_NAME') or data.get('server_name') or os.environ.get('PLEX_SERVER_NAME', 'MyPlexServer')
         
         if not token:
-            return jsonify({'error': 'Plex token required'}), 400
+            return jsonify({'status': 'error', 'error': 'Plex token required'}), 400
         
         # Temporarily set environment for test
         old_token = os.environ.get('PLEX_TOKEN')
@@ -510,6 +759,7 @@ def api_test_plex():
             users = daemon.plex_get_users()
             web_log(f"Plex connection successful: {len(users)} users", "SUCCESS")
             return jsonify({
+                'status': 'success',
                 'success': True,
                 'username': acct.username,
                 'email': acct.email,
@@ -527,9 +777,18 @@ def api_test_plex():
             elif 'PLEX_SERVER_NAME' in os.environ:
                 del os.environ['PLEX_SERVER_NAME']
             
+    except requests.exceptions.Timeout:
+        error_msg = 'Plex connection timeout. Check your network connection.'
+        web_log(f"Plex test failed: {error_msg}", "ERROR")
+        return jsonify({'status': 'error', 'error': error_msg}), 500
+    except requests.exceptions.ConnectionError:
+        error_msg = 'Cannot connect to Plex. Check if Plex is running and accessible.'
+        web_log(f"Plex test failed: {error_msg}", "ERROR")
+        return jsonify({'status': 'error', 'error': error_msg}), 500
     except Exception as e:
-        web_log(f"Plex connection failed: {str(e)}", "ERROR")
-        return jsonify({'error': str(e)}), 500
+        error_msg = f'Plex test failed: {str(e)}'
+        web_log(error_msg, "ERROR")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
 
 @app.route('/api/test/tautulli', methods=['POST'])
 def api_test_tautulli():
@@ -541,7 +800,7 @@ def api_test_tautulli():
         tautulli_key = data.get('TAUTULLI_API_KEY') or data.get('api_key') or os.environ.get('TAUTULLI_API_KEY')
         
         if not tautulli_url or not tautulli_key:
-            return jsonify({'error': 'Tautulli URL and API key required'}), 400
+            return jsonify({'status': 'error', 'error': 'Tautulli URL and API key required'}), 400
         
         # Temporarily set environment for test
         old_url = os.environ.get('TAUTULLI_URL')
@@ -554,6 +813,7 @@ def api_test_tautulli():
             users = daemon.tautulli('get_users')
             web_log(f"Tautulli connection successful: {len(users)} users", "SUCCESS")
             return jsonify({
+                'status': 'success',
                 'success': True,
                 'user_count': len(users)
             })
@@ -569,14 +829,222 @@ def api_test_tautulli():
             elif 'TAUTULLI_API_KEY' in os.environ:
                 del os.environ['TAUTULLI_API_KEY']
             
+    except requests.exceptions.Timeout:
+        error_msg = 'Tautulli connection timeout. Check your Tautulli URL and network connection.'
+        web_log(f"Tautulli test failed: {error_msg}", "ERROR")
+        return jsonify({'status': 'error', 'error': error_msg}), 500
+    except requests.exceptions.ConnectionError:
+        error_msg = 'Cannot connect to Tautulli. Verify the URL is correct and Tautulli is running.'
+        web_log(f"Tautulli test failed: {error_msg}", "ERROR")
+        return jsonify({'status': 'error', 'error': error_msg}), 500
     except Exception as e:
-        web_log(f"Tautulli connection failed: {str(e)}", "ERROR")
-        return jsonify({'error': str(e)}), 500
+        error_msg = f'Tautulli test failed: {str(e)}'
+        web_log(error_msg, "ERROR")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
 
 @app.route('/api/logs', methods=['GET'])
+@api_login_required
 def api_get_logs():
     """Get log history"""
     return jsonify({'logs': log_buffer})
+
+@app.route('/api/first-run/import-users', methods=['POST'])
+def api_import_existing_users():
+    """Import all existing Plex users as already welcomed (first-run setup)"""
+    try:
+        count = daemon.import_existing_users_as_welcomed()
+        web_log(f"Imported {count} existing users as already welcomed", "INFO")
+        return jsonify({
+            'success': True, 
+            'imported_count': count,
+            'message': f'Successfully imported {count} existing users'
+        })
+    except Exception as e:
+        web_log(f"Failed to import existing users: {str(e)}", "ERROR")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/first-run/skip-import', methods=['POST'])
+def api_skip_import():
+    """Skip user import and mark first run as complete"""
+    try:
+        state = daemon.load_state()
+        state['first_run_complete'] = True
+        daemon.save_state(state)
+        web_log("Skipped user import, first run marked as complete", "INFO")
+        return jsonify({'success': True})
+    except Exception as e:
+        web_log(f"Failed to skip import: {str(e)}", "ERROR")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/email-history', methods=['GET'])
+@api_login_required
+def api_get_email_history():
+    """Get email send history"""
+    try:
+        state = daemon.load_state()
+        # Return last 100 emails, most recent first
+        history = state.get('email_history', [])[-100:]
+        history.reverse()
+        return jsonify({'emails': history, 'total': len(state.get('email_history', []))})
+    except Exception as e:
+        web_log(f"Failed to retrieve email history: {str(e)}", "ERROR")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/first-run/status', methods=['GET'])
+def api_first_run_status():
+    """Check if this is the first run"""
+    try:
+        state = daemon.load_state()
+        return jsonify({
+            'is_first_run': not state.get('first_run_complete', False),
+            'welcomed_count': len(state.get('welcomed', {})),
+            'email_count': len(state.get('email_history', []))
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/daemon/status', methods=['GET'])
+@api_login_required
+def api_daemon_status():
+    """Get daemon monitoring status"""
+    try:
+        return jsonify({
+            'enabled': daemon.daemon_enabled,
+            'dry_run': os.environ.get('DRY_RUN', 'true').lower() in ('true', '1', 'yes')
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/daemon/start', methods=['POST'])
+@api_login_required
+def api_daemon_start():
+    """Enable daemon monitoring"""
+    try:
+        daemon.save_daemon_control(True)
+        web_log("Daemon monitoring enabled by user", "SUCCESS")
+        return jsonify({'success': True, 'enabled': True})
+    except Exception as e:
+        web_log(f"Failed to enable daemon: {str(e)}", "ERROR")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/daemon/stop', methods=['POST'])
+@api_login_required
+def api_daemon_stop():
+    """Disable daemon monitoring"""
+    try:
+        daemon.save_daemon_control(False)
+        web_log("Daemon monitoring disabled by user", "WARNING")
+        return jsonify({'success': True, 'enabled': False})
+    except Exception as e:
+        web_log(f"Failed to disable daemon: {str(e)}", "ERROR")
+        return jsonify({'error': str(e)}), 500
+
+# ==================== BACKUP & RESTORE ====================
+
+@app.route('/api/backup', methods=['GET'])
+@api_login_required
+def api_backup():
+    """Create and download a backup of configuration and state"""
+    import zipfile
+    import io
+    from datetime import datetime
+    
+    try:
+        # Create in-memory ZIP file
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Add .env file if it exists
+            if os.path.exists('.env'):
+                zip_file.write('.env', 'config.env')
+            
+            # Add state.json if it exists
+            state_path = os.path.join('state', 'state.json')
+            if os.path.exists(state_path):
+                zip_file.write(state_path, 'state.json')
+            
+            # Add a backup manifest
+            manifest = {
+                'backup_date': datetime.now().isoformat(),
+                'version': '1.0',
+                'files': ['config.env', 'state.json']
+            }
+            import json
+            zip_file.writestr('manifest.json', json.dumps(manifest, indent=2))
+        
+        zip_buffer.seek(0)
+        
+        web_log("Configuration backup created", "INFO")
+        
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f'guardian-backup-{datetime.now().strftime("%Y%m%d-%H%M%S")}.zip'
+        )
+    except Exception as e:
+        web_log(f"Backup failed: {str(e)}", "ERROR")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/restore', methods=['POST'])
+@api_login_required
+def api_restore():
+    """Restore configuration and state from backup"""
+    import zipfile
+    import tempfile
+    
+    try:
+        if 'backup' not in request.files:
+            return jsonify({'status': 'error', 'message': 'No backup file provided'}), 400
+        
+        backup_file = request.files['backup']
+        
+        if not backup_file.filename.endswith('.zip'):
+            return jsonify({'status': 'error', 'message': 'Invalid file type. Must be a .zip file'}), 400
+        
+        # Create temporary directory for extraction
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Save uploaded file
+            temp_zip = os.path.join(temp_dir, 'backup.zip')
+            backup_file.save(temp_zip)
+            
+            # Extract ZIP
+            with zipfile.ZipFile(temp_zip, 'r') as zip_file:
+                zip_file.extractall(temp_dir)
+            
+            # Restore .env
+            config_file = os.path.join(temp_dir, 'config.env')
+            if os.path.exists(config_file):
+                import shutil
+                shutil.copy(config_file, '.env')
+                web_log("Configuration restored from backup", "INFO")
+            
+            # Restore state.json
+            state_backup = os.path.join(temp_dir, 'state.json')
+            if os.path.exists(state_backup):
+                import shutil
+                os.makedirs('state', exist_ok=True)
+                shutil.copy(state_backup, os.path.join('state', 'state.json'))
+                web_log("User state restored from backup", "INFO")
+        
+        # Restart daemon to pick up new configuration
+        daemon.save_daemon_control(False)
+        web_log("Backup restored successfully. Daemon will restart.", "SUCCESS")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Backup restored successfully. Daemon restarting...'
+        })
+    except Exception as e:
+        web_log(f"Restore failed: {str(e)}", "ERROR")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# ==================== HEALTH CHECK ====================
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Docker healthcheck"""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now(timezone.utc).isoformat()}), 200
 
 # ==================== WEBSOCKET EVENTS ====================
 

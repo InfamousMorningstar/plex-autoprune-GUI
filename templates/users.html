@@ -3,14 +3,18 @@
 {% block title %}User Management{% endblock %}
 
 {% block content %}
-<h1 style="color: var(--centauri-cyan); margin-bottom: 2rem;">User Management</h1>
+<!-- Page Header -->
+<div style="margin-bottom: 24px;">
+    <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 4px;">$ guardian users --list --all</div>
+    <h1 style="color: var(--brand-cyan); font-size: 20px; font-weight: normal; margin: 0;">User Management</h1>
+</div>
 
 <!-- Filters & Search -->
 <div class="card">
-    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
-        <input type="text" id="searchInput" class="form-input" placeholder="Search users..." style="flex: 1; min-width: 250px;">
+    <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 16px;">
+        <input type="text" id="searchInput" placeholder="Search users..." style="flex: 1; min-width: 250px;">
         
-        <select id="statusFilter" class="form-input" style="width: 150px;">
+        <select id="statusFilter" style="width: 150px;">
             <option value="">All Status</option>
             <option value="active">Active</option>
             <option value="warned">Warned</option>
@@ -18,8 +22,27 @@
             <option value="new">New</option>
         </select>
         
-        <button class="btn btn-secondary" onclick="refreshUsers()">↻ Refresh</button>
-        <button class="btn btn-primary" onclick="exportUsers()">↓ Export CSV</button>
+        <div class="btn-group">
+            <button class="btn" onclick="toggleBulkMode()">☑ Bulk Select</button>
+            <button class="btn" onclick="refreshUsers()">↻ Refresh</button>
+            <button class="btn btn-primary" onclick="exportUsers()">↓ Export CSV</button>
+        </div>
+    </div>
+    
+    <!-- Bulk Actions Bar (hidden by default) -->
+    <div id="bulkActionsBar" style="display: none; padding: 16px; border-top: 1px solid var(--term-border); background: var(--term-surface-2);">
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <span style="color: var(--text-secondary); font-size: 12px;">
+                <span id="selectedCount">0</span> users selected
+            </span>
+            <div style="flex: 1;"></div>
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="bulkAddVIP()">⭐ Add to VIP</button>
+                <button class="btn" onclick="bulkRemoveVIP()">Remove VIP</button>
+                <button class="btn btn-warning" onclick="bulkWarn()">⚠ Warn All</button>
+                <button class="btn" onclick="clearSelection()">Clear Selection</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -27,19 +50,24 @@
 <div class="card">
     <div class="card-header">
         <h2 class="card-title">All Users (<span id="userCount">0</span>)</h2>
-        <div style="display: flex; gap: 0.5rem;">
-            <span class="badge badge-success"><span id="activeCount">0</span> Active</span>
-            <span class="badge badge-warning"><span id="warnedCount">0</span> Warned</span>
-            <span class="badge badge-danger"><span id="removedCount">0</span> Removed</span>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <span class="badge badge-success"><span id="activeCount">0</span> ACTIVE</span>
+            <span class="badge badge-warning"><span id="warnedCount">0</span> WARNED</span>
+            <span class="badge badge-danger"><span id="removedCount">0</span> REMOVED</span>
         </div>
     </div>
     
-    <div id="loadingSpinner" class="spinner"></div>
+    <div id="loadingSpinner" style="padding: 40px; text-align: center; color: var(--text-muted); display: none;">
+        <div style="font-size: 11px;">⟳ Loading users...</div>
+    </div>
     
     <div id="usersTableContainer" style="display: none; overflow-x: auto;">
-        <table class="table">
+        <table>
             <thead>
                 <tr>
+                    <th id="checkboxHeader" style="width: 40px; display: none;">
+                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()" style="cursor: pointer;">
+                    </th>
                     <th onclick="sortTable('name')" style="cursor: pointer;">Name ▼</th>
                     <th onclick="sortTable('email')" style="cursor: pointer;">Email ▼</th>
                     <th onclick="sortTable('status')" style="cursor: pointer;">Status ▼</th>
@@ -66,102 +94,132 @@
             <p id="modalMessage"></p>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn" onclick="closeModal()">Cancel</button>
             <button id="modalConfirm" class="btn btn-primary">Confirm</button>
         </div>
     </div>
 </div>
 
 <style>
-    .modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-    }
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
 
-    .modal-content {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        max-width: 500px;
-        width: 90%;
-    }
+.modal-content {
+    background: var(--term-surface);
+    border: 1px solid var(--term-border);
+    border-radius: 6px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
 
-    .modal-header {
-        padding: 1.5rem;
-        border-bottom: 1px solid var(--border-color);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--term-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 
-    .modal-header h2 {
-        color: var(--centauri-cyan);
-        font-size: 1.25rem;
-    }
+.modal-header h2 {
+    color: var(--brand-cyan);
+    font-size: 16px;
+    font-weight: normal;
+    margin: 0;
+}
 
-    .btn-close {
-        background: none;
-        border: none;
-        color: var(--text-secondary);
-        font-size: 2rem;
-        cursor: pointer;
-        padding: 0;
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+.btn-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: color 0.15s;
+}
 
-    .btn-close:hover {
-        color: var(--centauri-cyan);
-    }
+.btn-close:hover {
+    color: var(--brand-danger);
+}
 
-    .modal-body {
-        padding: 1.5rem;
-    }
+.modal-body {
+    padding: 24px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
 
-    .modal-footer {
-        padding: 1.5rem;
-        border-top: 1px solid var(--border-color);
-        display: flex;
-        gap: 1rem;
-        justify-content: flex-end;
-    }
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--term-border);
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
 
+.action-buttons {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.action-buttons button {
+    padding: 6px 12px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+tbody tr {
+    transition: background 0.15s;
+}
+
+tbody tr:hover {
+    background: var(--term-surface-2) !important;
+}
+
+/* VIP column styling */
+table th:nth-child(5),
+table td:nth-child(5) {
+    min-width: 100px;
+    white-space: nowrap;
+}
+
+/* Responsive table */
+@media (max-width: 768px) {
     .action-buttons {
-        display: flex;
-        gap: 0.5rem;
-        justify-content: flex-end;
+        flex-direction: column;
     }
-
+    
     .action-buttons button {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.85rem;
+        width: 100%;
     }
-
-    .user-row {
-        transition: background 0.2s;
-    }
-
-    .user-row:hover {
-        background: var(--bg-tertiary) !important;
-    }
+}
 </style>
 
 <script>
-    let allUsers = [];
-    let filteredUsers = [];
-    let sortColumn = 'name';
-    let sortDirection = 'asc';
+let allUsers = [];
+let filteredUsers = [];
+let sortColumn = 'name';
+let sortDirection = 'asc';
+let bulkModeEnabled = false;
+let selectedUserIds = new Set();
 
     async function loadUsers() {
         document.getElementById('loadingSpinner').style.display = 'block';
@@ -199,21 +257,32 @@
         const tbody = document.getElementById('usersTableBody');
         
         if (filteredUsers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">No users found</td></tr>';
+            const colspan = bulkModeEnabled ? 7 : 6;
+            tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: var(--text-muted); padding: 32px;">No users found</td></tr>`;
             return;
         }
 
         tbody.innerHTML = filteredUsers.map(user => `
-            <tr class="user-row">
+            <tr>
+                ${bulkModeEnabled ? `
+                    <td>
+                        <input type="checkbox" 
+                               class="user-checkbox" 
+                               data-user-id="${user.id}"
+                               ${selectedUserIds.has(user.id) ? 'checked' : ''}
+                               onchange="updateSelection('${user.id}')"
+                               style="cursor: pointer;">
+                    </td>
+                ` : ''}
                 <td>
                     <strong>${user.name}</strong>
-                    ${user.username ? `<br><small style="color: var(--text-muted);">@${user.username}</small>` : ''}
+                    ${user.username ? `<br><small style="color: var(--text-muted); font-size: 11px;">@${user.username}</small>` : ''}
                 </td>
                 <td>${user.email || '<span style="color: var(--text-muted);">No email</span>'}</td>
                 <td><span class="badge badge-${user.badge_class}">${user.status.toUpperCase()}</span></td>
                 <td>
                     ${user.days_inactive !== null ? 
-                        `<span style="color: ${user.days_inactive > 25 ? 'var(--danger)' : user.days_inactive > 20 ? 'var(--warning)' : 'var(--success)'}">
+                        `<span style="color: ${user.days_inactive > 25 ? 'var(--brand-danger)' : user.days_inactive > 20 ? 'var(--brand-warning)' : 'var(--brand-success)'}">
                             ${user.days_inactive} days ago
                         </span>` : 
                         '<span style="color: var(--text-muted);">Never</span>'
@@ -221,8 +290,8 @@
                 </td>
                 <td>
                     ${user.is_vip ? 
-                        '<span class="badge badge-info">VIP</span>' : 
-                        '<button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="toggleVIP(\'${user.id}\')">Add VIP</button>'
+                        '<span class="badge badge-info">⭐ VIP</span>' : 
+                        `<button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="toggleVIP('${user.id}')">Add VIP</button>`
                     }
                 </td>
                 <td>
@@ -232,15 +301,17 @@
                             <button class="btn btn-warning" onclick="warnUser('${user.id}', '${user.name}')">⚠ Warn</button>
                             <button class="btn btn-danger" onclick="removeUser('${user.id}', '${user.name}')">✗ Remove</button>
                         ` : `
-                            <button class="btn btn-secondary" onclick="resetUser('${user.id}', '${user.name}')">↻ Reset</button>
+                            <button class="btn" onclick="resetUser('${user.id}', '${user.name}')">↻ Reset</button>
                         `}
                         ${user.is_vip ? `
-                            <button class="btn btn-secondary" onclick="toggleVIP('${user.id}')">Remove VIP</button>
+                            <button class="btn" onclick="toggleVIP('${user.id}')">Remove VIP</button>
                         ` : ''}
                     </div>
                 </td>
             </tr>
         `).join('');
+        
+        updateSelectedCount();
     }
 
     function filterUsers() {
@@ -405,6 +476,157 @@
 
     function refreshUsers() {
         loadUsers();
+    }
+
+    function toggleBulkMode() {
+        bulkModeEnabled = !bulkModeEnabled;
+        document.getElementById('checkboxHeader').style.display = bulkModeEnabled ? '' : 'none';
+        document.getElementById('bulkActionsBar').style.display = bulkModeEnabled ? 'block' : 'none';
+        
+        if (!bulkModeEnabled) {
+            selectedUserIds.clear();
+            document.getElementById('selectAll').checked = false;
+        }
+        
+        renderUsers();
+    }
+
+    function updateSelection(userId) {
+        if (selectedUserIds.has(userId)) {
+            selectedUserIds.delete(userId);
+        } else {
+            selectedUserIds.add(userId);
+        }
+        updateSelectedCount();
+        updateSelectAllCheckbox();
+    }
+
+    function toggleSelectAll() {
+        const selectAll = document.getElementById('selectAll').checked;
+        
+        if (selectAll) {
+            filteredUsers.forEach(user => selectedUserIds.add(user.id));
+        } else {
+            selectedUserIds.clear();
+        }
+        
+        renderUsers();
+    }
+
+    function updateSelectAllCheckbox() {
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const allFilteredIds = filteredUsers.map(u => u.id);
+        const allSelected = allFilteredIds.every(id => selectedUserIds.has(id));
+        selectAllCheckbox.checked = allSelected && allFilteredIds.length > 0;
+    }
+
+    function updateSelectedCount() {
+        document.getElementById('selectedCount').textContent = selectedUserIds.size;
+    }
+
+    function clearSelection() {
+        selectedUserIds.clear();
+        document.getElementById('selectAll').checked = false;
+        renderUsers();
+    }
+
+    async function bulkAddVIP() {
+        if (selectedUserIds.size === 0) {
+            showAlert('No users selected', 'error');
+            return;
+        }
+
+        const count = selectedUserIds.size;
+        showActionModal(
+            'Add Users to VIP',
+            `Add ${count} selected user${count > 1 ? 's' : ''} to VIP protection?\n\nThey will be protected from auto-removal.`,
+            'btn-success',
+            async () => {
+                let successCount = 0;
+                let failCount = 0;
+
+                for (const userId of selectedUserIds) {
+                    try {
+                        await API.post(`/api/users/${userId}/vip`);
+                        successCount++;
+                    } catch (error) {
+                        failCount++;
+                    }
+                }
+
+                closeModal();
+                showAlert(`✓ ${successCount} user${successCount !== 1 ? 's' : ''} added to VIP${failCount > 0 ? ` (${failCount} failed)` : ''}`, 'success');
+                clearSelection();
+                loadUsers();
+            }
+        );
+    }
+
+    async function bulkRemoveVIP() {
+        if (selectedUserIds.size === 0) {
+            showAlert('No users selected', 'error');
+            return;
+        }
+
+        const count = selectedUserIds.size;
+        showActionModal(
+            'Remove VIP Status',
+            `Remove VIP status from ${count} selected user${count > 1 ? 's' : ''}?\n\nThey will no longer be protected from auto-removal.`,
+            'btn-warning',
+            async () => {
+                let successCount = 0;
+                let failCount = 0;
+
+                for (const userId of selectedUserIds) {
+                    try {
+                        await API.post(`/api/users/${userId}/vip`);
+                        successCount++;
+                    } catch (error) {
+                        failCount++;
+                    }
+                }
+
+                closeModal();
+                showAlert(`✓ ${successCount} user${successCount !== 1 ? 's' : ''} VIP status removed${failCount > 0 ? ` (${failCount} failed)` : ''}`, 'success');
+                clearSelection();
+                loadUsers();
+            }
+        );
+    }
+
+    async function bulkWarn() {
+        if (selectedUserIds.size === 0) {
+            showAlert('No users selected', 'error');
+            return;
+        }
+
+        const count = selectedUserIds.size;
+        showActionModal(
+            'Send Warning Emails',
+            `Send inactivity warning emails to ${count} selected user${count > 1 ? 's' : ''}?`,
+            'btn-warning',
+            async () => {
+                let successCount = 0;
+                let failCount = 0;
+
+                for (const userId of selectedUserIds) {
+                    const user = allUsers.find(u => u.id === userId);
+                    if (!user || user.status === 'removed') continue;
+
+                    try {
+                        await API.post(`/api/users/${userId}/warn`, { days: 28 });
+                        successCount++;
+                    } catch (error) {
+                        failCount++;
+                    }
+                }
+
+                closeModal();
+                showAlert(`✓ ${successCount} warning${successCount !== 1 ? 's' : ''} sent${failCount > 0 ? ` (${failCount} failed)` : ''}`, 'success');
+                clearSelection();
+                loadUsers();
+            }
+        );
     }
 
     // Event listeners

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guardian - Plex Login</title>
+    <link rel="stylesheet" href="/static/terminal.css">
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-box {
+            background: var(--term-surface);
+            border: 1px solid var(--term-border);
+            border-radius: 6px;
+            padding: 48px 40px;
+            max-width: 450px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .login-header h1 {
+            color: var(--brand-cyan);
+            font-size: 24px;
+            font-weight: normal;
+            margin: 0 0 8px 0;
+        }
+
+        .login-header p {
+            color: var(--text-muted);
+            font-size: 13px;
+            margin: 0;
+        }
+
+        .plex-btn {
+            width: 100%;
+            padding: 14px 24px;
+            background: linear-gradient(135deg, #e5a00d 0%, #f49d37 100%);
+            border: none;
+            border-radius: 4px;
+            color: #000;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .plex-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(229, 160, 13, 0.4);
+        }
+
+        .plex-btn:active {
+            transform: translateY(0);
+        }
+
+        .alert {
+            margin-bottom: 24px;
+        }
+
+        .terminal-prompt {
+            color: var(--text-muted);
+            font-size: 11px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .security-note {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid var(--term-border);
+            text-align: center;
+        }
+
+        .security-note p {
+            color: var(--text-muted);
+            font-size: 11px;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <div class="login-header">
+            <h1>Guardian Login</h1>
+            <p>Authenticate with your Plex account</p>
+        </div>
+
+        <div class="terminal-prompt">$ guardian --authenticate</div>
+
+        {% if error %}
+        <div class="alert alert-danger">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <button class="plex-btn" onclick="loginWithPlex()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            Sign in with Plex
+        </button>
+
+        <div class="security-note">
+            <p>🔒 Your Plex credentials are never stored</p>
+            <p>Authentication handled directly by Plex.tv</p>
+        </div>
+    </div>
+
+    <script>
+        async function loginWithPlex() {
+            try {
+                // Request a PIN from Plex
+                const response = await fetch('/api/plex/auth/pin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert('Failed to initiate Plex login: ' + data.error);
+                    return;
+                }
+
+                // Open Plex auth in popup
+                const width = 600;
+                const height = 700;
+                const left = (screen.width / 2) - (width / 2);
+                const top = (screen.height / 2) - (height / 2);
+                
+                const authWindow = window.open(
+                    data.auth_url,
+                    'Plex Authentication',
+                    `width=${width},height=${height},left=${left},top=${top}`
+                );
+
+                // Poll for authentication
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const checkResponse = await fetch(`/login?pinID=${data.pin_id}`);
+                        if (checkResponse.redirected) {
+                            clearInterval(pollInterval);
+                            if (authWindow) authWindow.close();
+                            window.location.href = checkResponse.url;
+                        }
+                    } catch (err) {
+                        console.error('Poll error:', err);
+                    }
+                }, 1000);
+
+                // Stop polling after 5 minutes
+                setTimeout(() => {
+                    clearInterval(pollInterval);
+                    if (authWindow && !authWindow.closed) {
+                        authWindow.close();
+                        alert('Authentication timeout. Please try again.');
+                    }
+                }, 300000);
+
+            } catch (error) {
+                alert('Login failed: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -56,7 +56,7 @@ def run_web():
             web.app, 
             host='0.0.0.0', 
             port=8080, 
-            debug=True,  # Enable debug for more output
+            debug=False,  # PRODUCTION: Debug disabled for security
             use_reloader=False,  # Disable reloader in production
             log_output=True  # Enable logging
         )
