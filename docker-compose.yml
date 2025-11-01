@@ -1,3 +1,15 @@
+# =============================================================================
+# Plex-Auto-Prune GUI - Docker Compose Configuration
+# =============================================================================
+# ⚠️  WARNING: BETA SOFTWARE - FOR TESTING ONLY
+# 
+# This application is in early beta and NOT ready for production use.
+# ALWAYS start with DRY_RUN=true and test thoroughly before going live.
+# 
+# Known issues and incomplete features - use at your own risk!
+# Report bugs: https://github.com/InfamousMorningstar/plex-autoprune-GUI/issues
+# =============================================================================
+
 services:
   plex-auto-prune-gui:
     build: .

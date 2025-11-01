@@ -1,5 +1,18 @@
 # Plex-Auto-Prune GUI - Plex User Management
 
+> [!WARNING]
+> **⚠️ BETA SOFTWARE - NOT READY FOR PRODUCTION USE ⚠️**
+> 
+> This application is in **early beta testing phase**. It contains known bugs and incomplete features. 
+> 
+> **DO NOT use this in a live production environment without thorough testing in DRY_RUN mode first.**
+> 
+> - ❌ Not feature-complete
+> - ❌ Contains known bugs
+> - ❌ Some functionality still in planning phase
+> - ✅ Testing and feedback welcome
+> - ✅ Use DRY_RUN=true for safe evaluation
+
 A sophisticated web interface for automated Plex user management. Plex-Auto-Prune GUI monitors user activity via Tautulli and automatically manages access based on inactivity, with a beautiful terminal-themed web dashboard.
 
 ## Features
@@ -36,6 +49,9 @@ cd plex-auto-prune-gui
 
 ### 2. First-Time Setup
 
+> [!CAUTION]
+> **Always start with DRY_RUN=true to test without making real changes!**
+
 ```bash
 docker-compose up --build
 ```
@@ -51,12 +67,25 @@ The setup wizard will guide you through configuration:
 - Discord webhooks (optional)
 - Thresholds and VIP users
 
-### 4. Start Managing!
+### 4. Test Thoroughly Before Going Live
+
+> [!IMPORTANT]
+> **BETA TESTING CHECKLIST:**
+> 
+> - ✅ Keep `DRY_RUN=true` for at least 1-2 weeks
+> - ✅ Monitor logs daily for errors or unexpected behavior
+> - ✅ Verify VIP users are properly protected
+> - ✅ Test email notifications are working correctly
+> - ✅ Check that user detection is accurate
+> - ✅ Review all automated actions in logs before enabling live mode
+> - ⚠️ Report any bugs or issues on GitHub
+> 
+> **Only set DRY_RUN=false after extensive testing and validation!**
 
 Once setup is complete, Plex-Auto-Prune GUI will:
 - Run the monitoring daemon in the background
 - Provide a web dashboard at port 8080
-- Automatically manage users based on your settings
+- Log all actions (but not execute them in DRY_RUN mode)
 
 ## Configuration
 
@@ -244,13 +273,43 @@ python main.py
 | **Test tools** | ❌ | ✅ |
 | Configuration | .env file | Web UI |
 
+## Known Issues & Limitations
+
+> [!WARNING]
+> **BETA SOFTWARE - Known Issues:**
+> 
+> - 🐛 Some edge cases in user detection not fully tested
+> - 🐛 Email template customization not yet implemented
+> - 🐛 Multi-server support incomplete
+> - 🐛 Performance with 100+ users not validated
+> - 🐛 Some error handling needs improvement
+> - 📋 Advanced analytics dashboard (planned)
+> - 📋 Wizarr integration (planned)
+> - 📋 Mobile app (planned)
+> - 📋 Multi-channel notifications (planned)
+> 
+> **Please report bugs on GitHub Issues!**
+
 ## Support
+
+> [!NOTE]
+> This is beta software. Support is best-effort only.
 
 For issues specific to the web interface:
 1. Check browser console for JavaScript errors
 2. Check Docker logs for API errors
 3. Verify port 8080 is accessible
 4. Ensure state directory is writable
+5. **Report bugs**: https://github.com/InfamousMorningstar/plex-autoprune-GUI/issues
+
+## Contributing
+
+This project is in active development. Contributions, bug reports, and feature requests are welcome!
+
+- 🐛 **Bug Reports**: Use GitHub Issues
+- 💡 **Feature Requests**: Use GitHub Discussions
+- 🔧 **Pull Requests**: Always welcome (target `develop` branch)
+- 📖 **Documentation**: Help improve docs and guides
 
 ## Credits
 
@@ -263,3 +322,14 @@ Built with:
 ## License
 
 Same as the Plex-Auto-Prune daemon project.
+
+---
+
+> [!CAUTION]
+> **Final Reminder: This is BETA software!**
+> 
+> - Always use DRY_RUN=true for testing
+> - Monitor logs carefully
+> - Report bugs and issues
+> - Do NOT deploy to production without extensive testing
+> - Author assumes no responsibility for data loss or unintended user removals

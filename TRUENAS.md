@@ -1,5 +1,18 @@
 # TrueNAS SCALE Deployment Guide
 
+> [!WARNING]
+> **⚠️ BETA SOFTWARE - TESTING ONLY ⚠️**
+> 
+> This application is in **early beta** and should **NOT** be used in production environments.
+> 
+> - ❌ Not feature-complete
+> - ❌ Contains known bugs
+> - ❌ Some functionality incomplete
+> - ✅ **ALWAYS use DRY_RUN=true for testing**
+> - ✅ Monitor logs carefully before going live
+> 
+> **Use at your own risk. Test thoroughly before enabling live mode!**
+
 ## Quick Deployment on TrueNAS SCALE
 
 This guide will help you deploy Plex-Auto-Prune GUI on TrueNAS SCALE using Docker Compose.
@@ -92,6 +105,19 @@ ports:
 ```bash
 docker-compose up -d
 ```
+
+> [!IMPORTANT]
+> **BETA TESTING REQUIRED:**
+> 
+> After deployment, you MUST:
+> - ✅ Verify `DRY_RUN=true` in your .env file
+> - ✅ Monitor logs for at least 1-2 weeks: `docker logs plex-auto-prune-gui -f`
+> - ✅ Verify VIP users are being protected
+> - ✅ Check that user detection is working correctly
+> - ✅ Test email notifications manually
+> - ⚠️ Report any bugs or unexpected behavior
+> 
+> **DO NOT set DRY_RUN=false until you've validated everything works as expected!**
 
 #### 6. Access the Web UI
 
