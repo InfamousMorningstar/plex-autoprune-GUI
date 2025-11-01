@@ -626,37 +626,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     showStep(1);
     
     // Check if already authenticated with Plex via session
-    try {
-        console.log('Checking session...');
-        const response = await fetch('/api/session/check');
-        const data = await response.json();
-        
-        console.log('Session data:', data);
-        
-        if (data.authenticated && data.plex_token) {
-            // User is logged in - pre-fill Plex credentials
-            const tokenInput = document.querySelector('#plexAuthenticatedSection input[name="PLEX_TOKEN"]');
-            const serverInput = document.querySelector('#plexAuthenticatedSection input[name="PLEX_SERVER_NAME"]');
+    // Retry a few times in case session hasn't propagated yet
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            console.log(`Checking session... (attempt ${attempt + 1}/3)`);
+            const response = await fetch('/api/session/check', {
+                credentials: 'include'  // Important: include cookies
+            });
             
-            console.log('Setting token:', data.plex_token ? 'YES' : 'NO');
-            console.log('Setting server:', data.server_name);
-            
-            tokenInput.value = data.plex_token;
-            
-            // Try to get server name from Plex API
-            if (data.server_name) {
-                serverInput.value = data.server_name;
+            if (response.status === 401) {
+                console.log('Not authenticated (401)');
+                if (attempt < 2) {
+                    await new Promise(r => setTimeout(r, 500));  // Wait 500ms before retry
+                    continue;
+                }
+                break;
             }
             
-            document.getElementById('plexAuthenticatedSection').style.display = 'block';
-            document.getElementById('plexManualSection').style.display = 'none';
-            console.log('Showing authenticated section');
-        } else {
-            console.log('Not authenticated, showing manual section');
+            const data = await response.json();
+            console.log('Session data:', data);
+            
+            if (data.authenticated && data.plex_token) {
+                // User is logged in - pre-fill Plex credentials
+                const tokenInput = document.querySelector('#plexAuthenticatedSection input[name="PLEX_TOKEN"]');
+                const serverInput = document.querySelector('#plexAuthenticatedSection input[name="PLEX_SERVER_NAME"]');
+                
+                console.log('Setting token:', data.plex_token ? 'YES' : 'NO');
+                console.log('Setting server:', data.server_name);
+                
+                tokenInput.value = data.plex_token;
+                
+                // Set server name
+                if (data.server_name) {
+                    serverInput.value = data.server_name;
+                }
+                
+                document.getElementById('plexAuthenticatedSection').style.display = 'block';
+                document.getElementById('plexManualSection').style.display = 'none';
+                console.log('Showing authenticated section');
+                break;  // Success, stop retrying
+            } else {
+                console.log('Not authenticated, showing manual section');
+                break;
+            }
+        } catch (error) {
+            console.log(`Session check error (attempt ${attempt + 1}):`, error);
+            if (attempt < 2) {
+                await new Promise(r => setTimeout(r, 500));  // Wait 500ms before retry
+            } else {
+                console.log('Failed after 3 attempts, showing manual input');
+            }
         }
-    } catch (error) {
-        console.log('Session check error:', error);
-        console.log('Not authenticated via Plex OAuth, showing manual input');
     }
 });
 </script>
