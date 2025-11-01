@@ -37,6 +37,13 @@ A sophisticated web interface for automated Plex user management. Plex-Auto-Prun
 - **Real-time Updates** - Live statistics and logs via WebSockets
 - **One-Click Actions** - Manual welcome/warn/remove from GUI
 
+### ✉️ Customizable Email Templates
+- **Default Templates** - Professional, terminal-themed email designs included
+- **Custom HTML** - Replace with your own email templates
+- **Variable Branding** - Customize colors, server name, and footer links
+- **Easy to Use** - Drop HTML files in `email_templates/` directory
+- **Automatic Attribution** - Designer credit footer automatically added
+
 ## Quick Start (Docker)
 
 > [!TIP]
@@ -261,6 +268,52 @@ pip install -r requirements.txt
 # Run combined app
 python main.py
 ```
+
+## Customizing Email Templates
+
+Want to personalize the emails sent to your users? You have two options:
+
+### Option 1: Use Environment Variables (Simple Customization)
+
+Customize colors, server name, and footer links without touching HTML. Add these to your `.env` file:
+
+```bash
+# Server branding
+SERVER_NAME=My Awesome Plex Server
+BRAND_COLOR=#e5a00d              # Primary color (hex)
+BRAND_ACCENT_WARN=#ff9800        # Warning color
+BRAND_ACCENT_DANGER=#f44336      # Removal color
+
+# Footer links (optional - leave blank to hide)
+LINK_OVERSEERR=https://requests.yourdomain.com
+LINK_PORTFOLIO=https://yourwebsite.com
+LINK_DISCORD=https://discord.gg/your_invite
+```
+
+### Option 2: Custom HTML Templates (Full Control)
+
+Replace the entire email design with your own HTML templates:
+
+1. **Create your template** in the `email_templates/` directory:
+   - `welcome.html` - New user welcome email
+   - `warning.html` - Inactivity warning email
+   - `removal.html` - Account removal notice
+
+2. **Use placeholders** in your HTML:
+   ```html
+   <h1>Welcome, {display_name}!</h1>
+   <p>You've been inactive for {days} days.</p>
+   <p>You have {days_left} days remaining.</p>
+   ```
+
+3. **Restart the container** to apply changes:
+   ```bash
+   docker-compose restart
+   ```
+
+**📖 See `email_templates/README.md` for detailed examples and best practices.**
+
+**⚖️ Attribution:** All emails automatically include a small designer credit footer. This helps support the project and is appreciated!
 
 ## Troubleshooting
 

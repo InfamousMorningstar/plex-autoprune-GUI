@@ -183,16 +183,16 @@ def save_state(state):
 def send_email(to_addr, subject, html_body):
     msg = MIMEText(html_body, "html")
     msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
+    msg["From"] = os.environ.get("SMTP_FROM", SMTP_FROM)
     msg["To"] = to_addr
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+    with smtplib.SMTP(os.environ.get("SMTP_HOST", SMTP_HOST), int(os.environ.get("SMTP_PORT", SMTP_PORT))) as s:
         s.starttls()
-        s.login(SMTP_USERNAME, SMTP_PASSWORD)
-        s.sendmail(SMTP_FROM, [to_addr], msg.as_string())
+        s.login(os.environ.get("SMTP_USERNAME", SMTP_USERNAME), os.environ.get("SMTP_PASSWORD", SMTP_PASSWORD))
+        s.sendmail(os.environ.get("SMTP_FROM", SMTP_FROM), [to_addr], msg.as_string())
 
 def plex_headers():
     return {
-        "X-Plex-Token": PLEX_TOKEN,
+        "X-Plex-Token": os.environ.get("PLEX_TOKEN", PLEX_TOKEN),
         "X-Plex-Product": "Centauri-Autoprune",
         "X-Plex-Client-Identifier": "centauri-autoprune",
     }
@@ -274,8 +274,8 @@ def remove_friend(acct, user_id):
         return False
 
 def tautulli(cmd, **params):
-    payload = {"apikey": TAUTULLI_API_KEY, "cmd": cmd, **params}
-    r = requests.get(f"{TAUTULLI_URL}/api/v2", params=payload, timeout=30)
+    payload = {"apikey": os.environ.get("TAUTULLI_API_KEY", TAUTULLI_API_KEY), "cmd": cmd, **params}
+    r = requests.get(f"{os.environ.get('TAUTULLI_URL', TAUTULLI_URL)}/api/v2", params=payload, timeout=30)
     r.raise_for_status()
     j = r.json()
     if j.get("response",{}).get("result") != "success":
@@ -296,29 +296,61 @@ def tautulli_last_watch(user_id):
     return datetime.fromtimestamp(int(ts), tz=timezone.utc)
 
 # ---- Email templates ----
-# ---------- Centauri Email UI (paste below your imports) ----------
+# ---------- Email Template Configuration ----------
 
 from datetime import datetime, timezone
 from html import escape
 
-CENTAURI_NAME = "Centauri"
-CENTAURI_COLOR = "#7A5CFF"  # primary accent (purple)
-CENTAURI_ACCENT_WARN = "#FFB200"
-CENTAURI_ACCENT_DANGER = "#E63946"
-CENTAURI_TEXT = "#111111"
-CENTAURI_TEXT_MUTED = "#666666"
-CENTAURI_BG = "#F7F8FA"
+# Branding - customizable via environment variables
+SERVER_NAME = os.environ.get("SERVER_NAME", "Plex Server")  # Your server's display name
+BRAND_COLOR = os.environ.get("BRAND_COLOR", "#7A5CFF")  # Primary brand color (hex)
+BRAND_ACCENT_WARN = os.environ.get("BRAND_ACCENT_WARN", "#FFB200")  # Warning color
+BRAND_ACCENT_DANGER = os.environ.get("BRAND_ACCENT_DANGER", "#E63946")  # Danger/removal color
+BRAND_TEXT = os.environ.get("BRAND_TEXT", "#111111")  # Main text color
+BRAND_TEXT_MUTED = os.environ.get("BRAND_TEXT_MUTED", "#666666")  # Muted text color
+BRAND_BG = os.environ.get("BRAND_BG", "#F7F8FA")  # Background color
 
-# Footer links (edit if you prefer different URLs)
-LINK_PLEX = "https://app.plex.tv"
-LINK_OVERSEERR = "https://overseerr.ahmxd.net"
-LINK_PORTFOLIO = "https://portfolio.ahmxd.net"
-LINK_DISCORD = "https://discord.com/users/699763177315106836"
+# Footer links (optional - leave empty to hide)
+LINK_PLEX = os.environ.get("LINK_PLEX", "https://app.plex.tv")
+LINK_OVERSEERR = os.environ.get("LINK_OVERSEERR", "")  # Optional: Your Overseerr/Jellyseerr URL
+LINK_PORTFOLIO = os.environ.get("LINK_PORTFOLIO", "")  # Optional: Your website/portfolio
+LINK_DISCORD = os.environ.get("LINK_DISCORD", "")  # Optional: Your Discord invite or profile
 
 def _now_iso():
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
-def _centauri_emblem_svg(size=28, color=CENTAURI_COLOR):
+# Email template configuration
+CUSTOM_TEMPLATE_DIR = "/app/email_templates"  # Directory for custom email templates
+os.makedirs(CUSTOM_TEMPLATE_DIR, exist_ok=True)
+
+def _load_custom_template(template_name):
+    """
+    Load custom email template if it exists.
+    Users can place custom HTML files in /app/email_templates/:
+    - welcome.html
+    - removal.html
+    
+    Templates should include {display_name} placeholder.
+    Attribution footer will be automatically added.
+    """
+    template_path = os.path.join(CUSTOM_TEMPLATE_DIR, f"{template_name}.html")
+    if os.path.exists(template_path):
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    return None
+
+def _attribution_footer():
+    """Attribution footer for email templates - please keep this to credit the original designer"""
+    return """
+    <div style="text-align:center; margin-top:24px; padding-top:16px; border-top:1px solid #E7E9ED; font-size:11px; color:#9CA3AF;">
+      Email template designed by <a href="https://github.com/InfamousMorningstar" style="color:#7A5CFF; text-decoration:none;">Morningstar</a>
+    </div>
+    """.strip()
+
+def _server_emblem_svg(size=28, color=None):
+    """Generate SVG icon for email header"""
+    if color is None:
+        color = BRAND_COLOR
     # Minimal inline SVG emblem: concentric orbits forming a stylized “C”
     return f"""
     <svg width="{size}" height="{size}" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img">
@@ -346,11 +378,11 @@ def _styles():
         .cx-rule {{ border-color:#2A2F36 !important; }}
       }}
       .cx-wrap {{
-        margin:0; padding:24px; background:{CENTAURI_BG};
+        margin:0; padding:24px; background:{BRAND_BG};
       }}
       .cx-card {{
         margin:0 auto; max-width:700px; border-radius:14px; padding:24px 22px;
-        background:#FFFFFF; color:{CENTAURI_TEXT};
+        background:#FFFFFF; color:{BRAND_TEXT};
         box-shadow:0 8px 28px rgba(16,24,40,0.08);
         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
         font-size:15px; line-height:1.6;
@@ -366,9 +398,9 @@ def _styles():
       .cx-title {{
         margin:0; font-size:18px; font-weight:700;
       }}
-      .cx-subtitle {{ margin:2px 0 0 0; color:{CENTAURI_TEXT_MUTED}; font-size:13px; }}
+      .cx-subtitle {{ margin:2px 0 0 0; color:{BRAND_TEXT_MUTED}; font-size:13px; }}
       .cx-rule {{ border:0; border-top:1px solid #E7E9ED; margin:16px 0; }}
-      .cx-muted {{ color:{CENTAURI_TEXT_MUTED}; font-size:13px; }}
+      .cx-muted {{ color:{BRAND_TEXT_MUTED}; font-size:13px; }}
       .cx-kv b {{ font-weight:600; }}
       .cx-footer {{
         margin-top:18px; padding-top:14px; border-top:1px solid #E7E9ED; font-size:13px;
@@ -379,15 +411,17 @@ def _styles():
         padding:7px 11px; border-radius:8px; border:1px solid #E7E9ED; color:#0F172A;
       }}
       .cx-badge {{
-        display:inline-block; font-size:12px; padding:3px 8px; border-radius:999px; background:#EEF2FF; color:{CENTAURI_COLOR};
+        display:inline-block; font-size:12px; padding:3px 8px; border-radius:999px; background:#EEF2FF; color:{BRAND_COLOR};
         border:1px solid #E7E9ED; vertical-align:middle;
       }}
     </style>
     """.strip()
 
-def _shell(title, subtitle, body_html, accent=CENTAURI_COLOR, include_audit=None):
+def _shell(title, subtitle, body_html, accent=None, include_audit=None):
     # include_audit: optional dict of audit fields to render in admin emails
-    wm_svg = _centauri_emblem_svg(160, accent)
+    if accent is None:
+        accent = BRAND_COLOR
+    wm_svg = _server_emblem_svg(160, accent)
     audit_html = ""
     if include_audit:
         rows = "".join(
@@ -407,7 +441,7 @@ def _shell(title, subtitle, body_html, accent=CENTAURI_COLOR, include_audit=None
       <div class="cx-card">
         <div class="cx-watermark">{wm_svg}</div>
         <div class="cx-header">
-          {_centauri_emblem_svg(28, accent)}
+          {_server_emblem_svg(28, accent)}
           <div>
             <h1 class="cx-title" style="color:{accent};">{escape(title)}</h1>
             <div class="cx-subtitle">{escape(subtitle)}</div>
@@ -419,15 +453,17 @@ def _shell(title, subtitle, body_html, accent=CENTAURI_COLOR, include_audit=None
         {audit_html}
 
         <div class="cx-footer">
-          <span class="cx-badge">{CENTAURI_NAME}</span>
+          <span class="cx-badge">{SERVER_NAME}</span>
           <span class="cx-muted">Sent {escape(_now_iso())}</span>
           <div class="cx-btns" style="margin-left:auto;">
-            <a href="{LINK_PLEX}">Plex</a>
-            <a href="{LINK_OVERSEERR}">Overseerr</a>
-            <a href="{LINK_PORTFOLIO}">Portfolio</a>
-            <a href="{LINK_DISCORD}">Discord</a>
+            {f'<a href="{LINK_PLEX}">Plex</a>' if LINK_PLEX else ''}
+            {f'<a href="{LINK_OVERSEERR}">Overseerr</a>' if LINK_OVERSEERR else ''}
+            {f'<a href="{LINK_PORTFOLIO}">Portfolio</a>' if LINK_PORTFOLIO else ''}
+            {f'<a href="{LINK_DISCORD}">Discord</a>' if LINK_DISCORD else ''}
           </div>
         </div>
+        
+        {_attribution_footer()}
       </div>
     </div>
     """.strip()
@@ -435,6 +471,22 @@ def _shell(title, subtitle, body_html, accent=CENTAURI_COLOR, include_audit=None
 # ---------- Event templates ----------
 
 def welcome_email_html(display_name: str) -> str:
+    """
+    Generate welcome email HTML.
+    Checks for custom template first (/app/email_templates/welcome.html).
+    Falls back to default template if custom not found.
+    """
+    # Check for custom template
+    custom_template = _load_custom_template('welcome')
+    if custom_template:
+        # Replace placeholder and add attribution
+        html = custom_template.replace('{display_name}', escape(display_name))
+        # Add attribution before closing body tag
+        if '</body>' in html:
+            html = html.replace('</body>', f'{_attribution_footer()}</body>')
+        return html
+    
+    # Default template
     body = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -602,6 +654,8 @@ def welcome_email_html(display_name: str) -> str:
 
     </td></tr>
   </table>
+  
+  {_attribution_footer()}
 
 </body>
 </html>
@@ -611,7 +665,28 @@ def welcome_email_html(display_name: str) -> str:
 
 
 def warn_email_html(display_name: str, days: int) -> str:
+    """
+    Generate warning email HTML.
+    Checks for custom template first (/app/email_templates/warning.html).
+    Falls back to default template if custom not found.
+    Placeholders: {display_name}, {days}, {days_left}
+    """
     days_left = KICK_DAYS - days
+    
+    # Check for custom template
+    custom_template = _load_custom_template('warning')
+    if custom_template:
+        # Replace placeholders and add attribution
+        html = (custom_template
+                .replace('{display_name}', escape(display_name))
+                .replace('{days}', str(days))
+                .replace('{days_left}', str(days_left)))
+        # Add attribution before closing body tag
+        if '</body>' in html:
+            html = html.replace('</body>', f'{_attribution_footer()}</body>')
+        return html
+    
+    # Default template
     body = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -678,6 +753,8 @@ def warn_email_html(display_name: str, days: int) -> str:
 
     </td></tr>
   </table>
+  
+  {_attribution_footer()}
 
 </body>
 </html>
@@ -685,6 +762,23 @@ def warn_email_html(display_name: str, days: int) -> str:
     return body
 
 def removal_email_html(display_name: str) -> str:
+    """
+    Generate removal email HTML.
+    Checks for custom template first (/app/email_templates/removal.html).
+    Falls back to default template if custom not found.
+    Placeholder: {display_name}
+    """
+    # Check for custom template
+    custom_template = _load_custom_template('removal')
+    if custom_template:
+        # Replace placeholder and add attribution
+        html = custom_template.replace('{display_name}', escape(display_name))
+        # Add attribution before closing body tag
+        if '</body>' in html:
+            html = html.replace('</body>', f'{_attribution_footer()}</body>')
+        return html
+    
+    # Default template
     body = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -752,6 +846,8 @@ def removal_email_html(display_name: str) -> str:
 
     </td></tr>
   </table>
+  
+  {_attribution_footer()}
 
 </body>
 </html>

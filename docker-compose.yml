@@ -17,25 +17,7 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"  # Web UI port - can be changed (e.g., "9090:8080" for external port 9090)
-    environment:
-      # Will be loaded from .env file or set here
-      PLEX_TOKEN: ${PLEX_TOKEN}
-      PLEX_SERVER_NAME: ${PLEX_SERVER_NAME:-Centauri}
-      TAUTULLI_URL: ${TAUTULLI_URL}
-      TAUTULLI_API_KEY: ${TAUTULLI_API_KEY}
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USERNAME: ${SMTP_USERNAME}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_FROM: ${SMTP_FROM}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK}
-      LINK_DISCORD: ${LINK_DISCORD}
-      WARN_DAYS: ${WARN_DAYS:-27}
-      KICK_DAYS: ${KICK_DAYS:-30}
-      CHECK_NEW_USERS_SECS: ${CHECK_NEW_USERS_SECS:-120}
-      CHECK_INACTIVITY_SECS: ${CHECK_INACTIVITY_SECS:-1800}
-      VIP_NAMES: ${VIP_NAMES}
-      DRY_RUN: ${DRY_RUN:-true}
     volumes:
       - ./state:/app/state
+      - ./.env:/app/.env  # Mount .env file so setup wizard changes persist
+      - ./email_templates:/app/email_templates  # Optional: Custom email templates

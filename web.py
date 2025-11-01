@@ -409,13 +409,49 @@ def api_user_toggle_vip(user_id):
 def api_test_email():
     """Send test email"""
     try:
-        email = request.json.get('email')
+        data = request.json or {}
+        email = data.get('email') or data.get('ADMIN_EMAIL')
+        
+        # Get SMTP config from request or environment (support both uppercase and lowercase)
+        smtp_host = data.get('SMTP_HOST') or data.get('smtp_host') or os.environ.get('SMTP_HOST')
+        smtp_port = data.get('SMTP_PORT') or data.get('smtp_port') or os.environ.get('SMTP_PORT')
+        smtp_username = data.get('SMTP_USERNAME') or data.get('smtp_username') or os.environ.get('SMTP_USERNAME')
+        smtp_password = data.get('SMTP_PASSWORD') or data.get('smtp_password') or os.environ.get('SMTP_PASSWORD')
+        smtp_from = data.get('SMTP_FROM') or data.get('smtp_from') or os.environ.get('SMTP_FROM')
+        
         if not email:
             return jsonify({'error': 'Email required'}), 400
         
-        daemon.send_email(email, "Plex-Auto-Prune GUI Test Email", daemon.welcome_email_html("Test User"))
-        web_log(f"Test email sent to {email}", "SUCCESS")
-        return jsonify({'success': True})
+        if not all([smtp_host, smtp_port, smtp_username, smtp_password, smtp_from]):
+            return jsonify({'error': 'SMTP configuration required'}), 400
+        
+        # Temporarily set environment for test
+        old_host = os.environ.get('SMTP_HOST')
+        old_port = os.environ.get('SMTP_PORT')
+        old_user = os.environ.get('SMTP_USERNAME')
+        old_pass = os.environ.get('SMTP_PASSWORD')
+        old_from = os.environ.get('SMTP_FROM')
+        
+        os.environ['SMTP_HOST'] = smtp_host
+        os.environ['SMTP_PORT'] = str(smtp_port)
+        os.environ['SMTP_USERNAME'] = smtp_username
+        os.environ['SMTP_PASSWORD'] = smtp_password
+        os.environ['SMTP_FROM'] = smtp_from
+        
+        try:
+            daemon.send_email(email, "Plex-Auto-Prune GUI Test Email", daemon.welcome_email_html("Test User"))
+            web_log(f"Test email sent to {email}", "SUCCESS")
+            return jsonify({'success': True})
+        finally:
+            # Restore original environment
+            for key, old_val in [('SMTP_HOST', old_host), ('SMTP_PORT', old_port), 
+                                  ('SMTP_USERNAME', old_user), ('SMTP_PASSWORD', old_pass), 
+                                  ('SMTP_FROM', old_from)]:
+                if old_val:
+                    os.environ[key] = old_val
+                elif key in os.environ:
+                    del os.environ[key]
+                    
     except Exception as e:
         web_log(f"Test email failed: {str(e)}", "ERROR")
         return jsonify({'error': str(e)}), 500
@@ -424,9 +460,27 @@ def api_test_email():
 def api_test_discord():
     """Send test Discord notifications"""
     try:
-        daemon.test_discord_notifications()
-        web_log("Test Discord notifications sent", "SUCCESS")
-        return jsonify({'success': True})
+        data = request.json or {}
+        webhook = data.get('DISCORD_WEBHOOK') or data.get('webhook') or os.environ.get('DISCORD_WEBHOOK')
+        
+        if not webhook:
+            return jsonify({'error': 'Discord webhook URL required'}), 400
+        
+        # Temporarily set environment for test
+        old_webhook = os.environ.get('DISCORD_WEBHOOK')
+        os.environ['DISCORD_WEBHOOK'] = webhook
+        
+        try:
+            daemon.test_discord_notifications()
+            web_log("Test Discord notifications sent", "SUCCESS")
+            return jsonify({'success': True})
+        finally:
+            # Restore original environment
+            if old_webhook:
+                os.environ['DISCORD_WEBHOOK'] = old_webhook
+            elif 'DISCORD_WEBHOOK' in os.environ:
+                del os.environ['DISCORD_WEBHOOK']
+                
     except Exception as e:
         web_log(f"Discord test failed: {str(e)}", "ERROR")
         return jsonify({'error': str(e)}), 500
@@ -435,15 +489,44 @@ def api_test_discord():
 def api_test_plex():
     """Test Plex connection"""
     try:
-        acct = daemon.get_plex_account()
-        users = daemon.plex_get_users()
-        web_log(f"Plex connection successful: {len(users)} users", "SUCCESS")
-        return jsonify({
-            'success': True,
-            'username': acct.username,
-            'email': acct.email,
-            'user_count': len(users)
-        })
+        # Get token from request body (for setup wizard) or environment
+        data = request.json or {}
+        # Support both formats: uppercase (from form) and lowercase (legacy)
+        token = data.get('PLEX_TOKEN') or data.get('token') or os.environ.get('PLEX_TOKEN')
+        server_name = data.get('PLEX_SERVER_NAME') or data.get('server_name') or os.environ.get('PLEX_SERVER_NAME', 'MyPlexServer')
+        
+        if not token:
+            return jsonify({'error': 'Plex token required'}), 400
+        
+        # Temporarily set environment for test
+        old_token = os.environ.get('PLEX_TOKEN')
+        old_server = os.environ.get('PLEX_SERVER_NAME')
+        
+        os.environ['PLEX_TOKEN'] = token
+        os.environ['PLEX_SERVER_NAME'] = server_name
+        
+        try:
+            acct = daemon.get_plex_account()
+            users = daemon.plex_get_users()
+            web_log(f"Plex connection successful: {len(users)} users", "SUCCESS")
+            return jsonify({
+                'success': True,
+                'username': acct.username,
+                'email': acct.email,
+                'user_count': len(users)
+            })
+        finally:
+            # Restore original environment
+            if old_token:
+                os.environ['PLEX_TOKEN'] = old_token
+            elif 'PLEX_TOKEN' in os.environ:
+                del os.environ['PLEX_TOKEN']
+            
+            if old_server:
+                os.environ['PLEX_SERVER_NAME'] = old_server
+            elif 'PLEX_SERVER_NAME' in os.environ:
+                del os.environ['PLEX_SERVER_NAME']
+            
     except Exception as e:
         web_log(f"Plex connection failed: {str(e)}", "ERROR")
         return jsonify({'error': str(e)}), 500
@@ -452,12 +535,40 @@ def api_test_plex():
 def api_test_tautulli():
     """Test Tautulli connection"""
     try:
-        users = daemon.tautulli('get_users')
-        web_log(f"Tautulli connection successful: {len(users)} users", "SUCCESS")
-        return jsonify({
-            'success': True,
-            'user_count': len(users)
-        })
+        # Get config from request body (for setup wizard) or environment
+        data = request.json or {}
+        tautulli_url = data.get('TAUTULLI_URL') or data.get('url') or os.environ.get('TAUTULLI_URL')
+        tautulli_key = data.get('TAUTULLI_API_KEY') or data.get('api_key') or os.environ.get('TAUTULLI_API_KEY')
+        
+        if not tautulli_url or not tautulli_key:
+            return jsonify({'error': 'Tautulli URL and API key required'}), 400
+        
+        # Temporarily set environment for test
+        old_url = os.environ.get('TAUTULLI_URL')
+        old_key = os.environ.get('TAUTULLI_API_KEY')
+        
+        os.environ['TAUTULLI_URL'] = tautulli_url
+        os.environ['TAUTULLI_API_KEY'] = tautulli_key
+        
+        try:
+            users = daemon.tautulli('get_users')
+            web_log(f"Tautulli connection successful: {len(users)} users", "SUCCESS")
+            return jsonify({
+                'success': True,
+                'user_count': len(users)
+            })
+        finally:
+            # Restore original environment
+            if old_url:
+                os.environ['TAUTULLI_URL'] = old_url
+            elif 'TAUTULLI_URL' in os.environ:
+                del os.environ['TAUTULLI_URL']
+            
+            if old_key:
+                os.environ['TAUTULLI_API_KEY'] = old_key
+            elif 'TAUTULLI_API_KEY' in os.environ:
+                del os.environ['TAUTULLI_API_KEY']
+            
     except Exception as e:
         web_log(f"Tautulli connection failed: {str(e)}", "ERROR")
         return jsonify({'error': str(e)}), 500
