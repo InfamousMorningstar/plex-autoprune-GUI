@@ -217,19 +217,11 @@ def login():
                 # Verify token and get user info
                 verification = verify_plex_token(token)
                 if verification['valid']:
-                    # Save to session
-                    session['plex_token'] = token
-                    session['plex_username'] = verification['username']
-                    session['plex_email'] = verification['email']
-                    session.permanent = True
-                    
-                    # Save authentication
-                    save_plex_auth(token, verification['username'], verification['email'])
-                    
-                    # Update environment with token
+                    # Update environment with token first
                     os.environ['PLEX_TOKEN'] = token
                     
-                    # Try to get server name and update .env
+                    # Try to get server name BEFORE saving to session
+                    server_name = ''
                     try:
                         account = MyPlexAccount(token=token)
                         resources = account.resources()
@@ -237,16 +229,28 @@ def login():
                         if servers:
                             server_name = servers[0].name
                             os.environ['PLEX_SERVER_NAME'] = server_name
-                            
-                            # Update .env file
-                            config = get_env_config()
-                            config['PLEX_TOKEN'] = token
-                            config['PLEX_SERVER_NAME'] = server_name
-                            save_env_config(config)
-                            
-                            web_log(f"Plex login successful: {verification['username']} - Server: {server_name}", "SUCCESS")
+                            web_log(f"Plex server detected: {server_name}", "SUCCESS")
                     except Exception as e:
                         web_log(f"Could not fetch server info: {e}", "WARNING")
+                    
+                    # Save to session (including server_name)
+                    session['plex_token'] = token
+                    session['plex_username'] = verification['username']
+                    session['plex_email'] = verification['email']
+                    session['plex_server_name'] = server_name
+                    session.permanent = True
+                    
+                    # Save authentication
+                    save_plex_auth(token, verification['username'], verification['email'])
+                    
+                    # Update .env file with both token and server
+                    config = get_env_config()
+                    config['PLEX_TOKEN'] = token
+                    if server_name:
+                        config['PLEX_SERVER_NAME'] = server_name
+                    save_env_config(config)
+                    
+                    web_log(f"Plex login successful: {verification['username']}", "SUCCESS")
                     
                     return redirect(url_for('index'))
                 else:
@@ -407,7 +411,7 @@ def api_session_check():
             'plex_token': session.get('plex_token'),
             'plex_username': session.get('plex_username'),
             'plex_email': session.get('plex_email'),
-            'server_name': os.environ.get('PLEX_SERVER_NAME', '')
+            'server_name': session.get('plex_server_name', '') or os.environ.get('PLEX_SERVER_NAME', '')
         })
     else:
         return jsonify({'authenticated': False}), 401
