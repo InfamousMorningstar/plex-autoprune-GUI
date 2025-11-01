@@ -39,35 +39,59 @@ A sophisticated web interface for automated Plex user management. Plex-Auto-Prun
 
 ## Quick Start (Docker)
 
-**📦 TrueNAS SCALE Users**: See [TRUENAS.md](TRUENAS.md) for detailed deployment guide.
+> [!TIP]
+> **� First Time Setup?** Follow the detailed **[SETUP.md Guide](SETUP.md)** for step-by-step instructions!
+> 
+> **�📦 TrueNAS SCALE Users?** See **[TRUENAS.md](TRUENAS.md)** for container deployment guide.
 
-### 1. Clone or Download
+### 1. Clone the Repository
 
 ```bash
-cd plex-auto-prune-gui
+git clone https://github.com/InfamousMorningstar/plex-autoprune-GUI.git
+cd plex-autoprune-GUI
 ```
 
-### 2. First-Time Setup
+### 2. Configure Environment
+
+Copy the example configuration and edit with your values:
+
+```bash
+# Linux/Mac
+cp .env.example .env
+
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+**Edit `.env` with your credentials:**
+- 🔑 Plex Token ([How to find](https://support.plex.tv/articles/204059436))
+- 🔑 Tautulli API Key (Tautulli Settings → Web Interface)
+- 📧 Email SMTP settings ([Gmail App Password](https://support.google.com/accounts/answer/185833))
+- 👥 VIP usernames (comma-separated)
+- ⚠️ Keep `DRY_RUN=true` for testing!
+
+> 💡 See **[SETUP.md](SETUP.md)** for detailed configuration help
+
+### 3. Start the Application
 
 > [!CAUTION]
 > **Always start with DRY_RUN=true to test without making real changes!**
 
 ```bash
-docker-compose up --build
+docker-compose up -d
 ```
 
-### 3. Access Web Interface
+### 4. Access Web Interface
 
 Open your browser to: **http://localhost:8080**
 
-The setup wizard will guide you through configuration:
-- Plex authentication
-- Tautulli integration
-- Email settings (Gmail)
-- Discord webhooks (optional)
-- Thresholds and VIP users
+You'll see the dashboard with:
+- Real-time user monitoring
+- Activity statistics  
+- VIP user protection
+- Automated warning/removal logs
 
-### 4. Test Thoroughly Before Going Live
+### 5. Test Thoroughly Before Going Live
 
 > [!IMPORTANT]
 > **BETA TESTING CHECKLIST:**
