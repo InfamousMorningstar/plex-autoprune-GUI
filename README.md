@@ -26,6 +26,8 @@ A sophisticated web interface for automated Plex user management. Plex-Auto-Prun
 
 ## Quick Start (Docker)
 
+**📦 TrueNAS SCALE Users**: See [TRUENAS.md](TRUENAS.md) for detailed deployment guide.
+
 ### 1. Clone or Download
 
 ```bash
