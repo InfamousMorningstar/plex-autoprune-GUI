@@ -240,6 +240,8 @@ def login():
                     session['plex_server_name'] = server_name
                     session.permanent = True
                     
+                    web_log(f"Saved to session: token={bool(token)}, user={verification['username']}, server={server_name}", "DEBUG")
+                    
                     # Save authentication
                     save_plex_auth(token, verification['username'], verification['email'])
                     
@@ -397,14 +399,17 @@ def api_session_check():
     """Check if user is authenticated and return session info"""
     if session.get('plex_token'):
         # User is logged in via Plex OAuth
-        return jsonify({
+        session_data = {
             'authenticated': True,
             'plex_token': session.get('plex_token'),
             'plex_username': session.get('plex_username'),
             'plex_email': session.get('plex_email'),
             'server_name': session.get('plex_server_name', '') or os.environ.get('PLEX_SERVER_NAME', '')
-        })
+        }
+        web_log(f"Session check: token={bool(session_data['plex_token'])}, server={session_data['server_name']}", "DEBUG")
+        return jsonify(session_data)
     else:
+        web_log("Session check: No plex_token in session", "DEBUG")
         return jsonify({'authenticated': False}), 401
 
 @app.route('/api/config', methods=['GET'])
